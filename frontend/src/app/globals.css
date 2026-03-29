@@ -1,0 +1,57 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 17% 95%; /* #F0F2F5 */
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 316 21% 32%; /* #614058 Plum */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 316 21% 96%;
+    --secondary-foreground: 316 21% 32%;
+    --muted: 210 20% 90%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 33 100% 50%; /* #FF8C00 Orange */
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 316 21% 32%;
+    --radius: 0.75rem;
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 316 21% 32%;
+    --sidebar-primary: 316 21% 32%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 316 21% 96%;
+    --sidebar-accent-foreground: 316 21% 32%;
+    --sidebar-border: 214 32% 91%;
+    --sidebar-ring: 316 21% 32%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-body;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-headline;
+  }
+}
+
+.animate-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
