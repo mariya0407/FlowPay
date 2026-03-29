@@ -11,11 +11,10 @@ export interface Company {
 
 export interface User {
   id: string;
-  company_id: string;
   name: string;
   email: string;
-  password_hash?: string;
   role: UserRole;
+  company_ids: string[]; // A user can belong to multiple companies
   manager_id?: string;
   created_at: string;
 }
@@ -57,7 +56,7 @@ export interface Expense {
 export interface Receipt {
   id: string;
   expense_id: string;
-  file_url: string; // Used for the data URI in this MVP
+  file_url: string; 
   ocr_data?: any;
   created_at: string;
 }
@@ -73,7 +72,8 @@ export interface ExpenseApproval {
 }
 
 interface ReimburseFlowStore {
-  company: Company;
+  companies: Company[];
+  activeCompanyId: string;
   currentUser: User | null;
   users: User[];
   expenses: Expense[];
@@ -83,25 +83,24 @@ interface ReimburseFlowStore {
   expenseApprovals: ExpenseApproval[];
   
   setCurrentUser: (user: User | null) => void;
+  setActiveCompany: (id: string) => void;
+  addCompany: (company: Omit<Company, 'id' | 'created_at'>) => void;
   addUser: (user: User) => void;
   updateUser: (id: string, updates: Partial<User>) => void;
   addExpense: (expense: Omit<Expense, 'id' | 'created_at' | 'status'>, receiptDataUri?: string) => void;
   updateApprovalStatus: (expenseId: string, approverId: string, status: ExpenseStatus, comment?: string) => void;
   updateWorkflow: (rule: ApprovalRule, approvers: Omit<RuleApprover, 'id' | 'rule_id'>[]) => void;
-  setBaseCurrency: (currency: string) => void;
 }
 
-const initialCompany: Company = {
-  id: 'c1',
-  name: 'Global Corp',
-  base_currency: 'USD',
-  created_at: new Date().toISOString(),
-};
+const initialCompanies: Company[] = [
+  { id: 'c1', name: 'Global Corp', base_currency: 'USD', created_at: new Date().toISOString() },
+  { id: 'c2', name: 'Tech Startups Ltd', base_currency: 'EUR', created_at: new Date().toISOString() },
+];
 
 const initialUsers: User[] = [
-  { id: 'u1', company_id: 'c1', name: 'Alice Admin', email: 'alice@company.com', role: 'ADMIN', created_at: new Date().toISOString() },
-  { id: 'u2', company_id: 'c1', name: 'Bob Manager', email: 'bob@company.com', role: 'MANAGER', created_at: new Date().toISOString() },
-  { id: 'u3', company_id: 'c1', name: 'David Employee', email: 'david@company.com', role: 'EMPLOYEE', manager_id: 'u2', created_at: new Date().toISOString() },
+  { id: 'u1', name: 'Alice Admin', email: 'alice@company.com', role: 'ADMIN', company_ids: ['c1', 'c2'], created_at: new Date().toISOString() },
+  { id: 'u2', name: 'Bob Manager', email: 'bob@company.com', role: 'MANAGER', company_ids: ['c1', 'c2'], created_at: new Date().toISOString() },
+  { id: 'u3', name: 'David Employee', email: 'david@company.com', role: 'EMPLOYEE', company_ids: ['c1'], manager_id: 'u2', created_at: new Date().toISOString() },
 ];
 
 const initialRule: ApprovalRule = {
@@ -119,8 +118,9 @@ const initialApprovers: RuleApprover[] = [
 ];
 
 export const useStore = create<ReimburseFlowStore>((set) => ({
-  company: initialCompany,
-  currentUser: initialUsers[2],
+  companies: initialCompanies,
+  activeCompanyId: 'c1',
+  currentUser: initialUsers[0],
   users: initialUsers,
   expenses: [],
   receipts: [],
@@ -129,7 +129,16 @@ export const useStore = create<ReimburseFlowStore>((set) => ({
   expenseApprovals: [],
 
   setCurrentUser: (user) => set({ currentUser: user }),
+  setActiveCompany: (id) => set({ activeCompanyId: id }),
   
+  addCompany: (companyData) => set((state) => ({
+    companies: [...state.companies, { 
+      ...companyData, 
+      id: Math.random().toString(36).substr(2, 9), 
+      created_at: new Date().toISOString() 
+    }]
+  })),
+
   addUser: (user) => set((state) => ({ users: [...state.users, user] })),
   
   updateUser: (id, updates) => set((state) => ({
@@ -152,7 +161,6 @@ export const useStore = create<ReimburseFlowStore>((set) => ({
       created_at: new Date().toISOString(),
     } : null;
 
-    // Create initial pending approvals based on current rule
     const ruleApprovers = state.ruleApprovers.filter(ra => ra.rule_id === expenseData.rule_id);
     const initialApprovals: ExpenseApproval[] = ruleApprovers.map(ra => ({
       id: Math.random().toString(36).substr(2, 9),
@@ -176,7 +184,6 @@ export const useStore = create<ReimburseFlowStore>((set) => ({
         : ea
     );
 
-    // Check if the whole expense is now fully approved or rejected
     const expenseApprovals = updatedApprovals.filter(ea => ea.expense_id === expenseId);
     const isRejected = expenseApprovals.some(ea => ea.status === 'REJECTED');
     const isFullyApproved = expenseApprovals.every(ea => ea.status === 'APPROVED');
@@ -197,9 +204,5 @@ export const useStore = create<ReimburseFlowStore>((set) => ({
       ...state.ruleApprovers.filter(ra => ra.rule_id !== rule.id),
       ...approvers.map(a => ({ ...a, id: Math.random().toString(36).substr(2, 9), rule_id: rule.id }))
     ]
-  })),
-
-  setBaseCurrency: (currency) => set((state) => ({
-    company: { ...state.company, base_currency: currency }
   })),
 }));
