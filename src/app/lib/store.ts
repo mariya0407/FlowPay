@@ -8,6 +8,7 @@ export interface User {
   email: string;
   role: UserRole;
   managerId?: string;
+  avatar?: string;
 }
 
 export type ExpenseStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'FLAGGED';
@@ -26,22 +27,26 @@ export interface Expense {
   employeeId: string;
   employeeName: string;
   amount: number;
+  currency: string;
+  convertedAmount: number;
+  baseCurrency: string;
+  exchangeRate: number;
   category: string;
   description: string;
   date: string;
   status: ExpenseStatus;
-  receiptUrl?: string;
   receiptDataUri?: string;
-  fraudStatus?: 'CLEAR' | 'SUSPICIOUS';
-  fraudReason?: string;
   currentStepIndex: number;
   history: ExpenseHistory[];
+  approvalsInCurrentStep: string[]; // IDs of users who approved in current step
 }
 
 export interface ApprovalStep {
   id: string;
   name: string;
   approverRole: UserRole;
+  isRequired: boolean;
+  minApprovalPercentage: number; // For future multi-approver expansion
 }
 
 interface ReimburseFlowStore {
@@ -49,11 +54,15 @@ interface ReimburseFlowStore {
   users: User[];
   expenses: Expense[];
   workflow: ApprovalStep[];
+  baseCurrency: string;
   
   setCurrentUser: (user: User | null) => void;
-  addExpense: (expense: Omit<Expense, 'id' | 'currentStepIndex' | 'history'>) => void;
-  updateExpenseStatus: (id: string, userId: string, status: ExpenseStatus, comment?: string) => void;
+  addUser: (user: User) => void;
+  updateUser: (id: string, updates: Partial<User>) => void;
+  addExpense: (expense: Omit<Expense, 'id' | 'currentStepIndex' | 'history' | 'approvalsInCurrentStep'>) => void;
+  updateExpenseStatus: (id: string, userId: string, status: 'APPROVED' | 'REJECTED', comment?: string) => void;
   setWorkflow: (steps: ApprovalStep[]) => void;
+  setBaseCurrency: (currency: string) => void;
 }
 
 const initialUsers: User[] = [
@@ -64,17 +73,24 @@ const initialUsers: User[] = [
 ];
 
 const initialWorkflow: ApprovalStep[] = [
-  { id: 's1', name: 'Manager Review', approverRole: 'MANAGER' },
-  { id: 's2', name: 'Finance Audit', approverRole: 'FINANCE' },
+  { id: 's1', name: 'Manager Review', approverRole: 'MANAGER', isRequired: true, minApprovalPercentage: 100 },
+  { id: 's2', name: 'Finance Audit', approverRole: 'FINANCE', isRequired: true, minApprovalPercentage: 100 },
 ];
 
 export const useStore = create<ReimburseFlowStore>((set) => ({
-  currentUser: initialUsers[3], // Default to David Employee for demo
+  currentUser: initialUsers[3],
   users: initialUsers,
   expenses: [],
   workflow: initialWorkflow,
+  baseCurrency: 'USD',
 
   setCurrentUser: (user) => set({ currentUser: user }),
+  
+  addUser: (user) => set((state) => ({ users: [...state.users, user] })),
+  
+  updateUser: (id, updates) => set((state) => ({
+    users: state.users.map(u => u.id === id ? { ...u, ...updates } : u)
+  })),
 
   addExpense: (expenseData) => set((state) => ({
     expenses: [
@@ -82,6 +98,7 @@ export const useStore = create<ReimburseFlowStore>((set) => ({
         ...expenseData,
         id: Math.random().toString(36).substr(2, 9),
         currentStepIndex: 0,
+        approvalsInCurrentStep: [],
         history: [{
           id: Math.random().toString(36).substr(2, 9),
           userId: expenseData.employeeId,
@@ -94,17 +111,23 @@ export const useStore = create<ReimburseFlowStore>((set) => ({
     ],
   })),
 
-  updateExpenseStatus: (id, userId, status, comment) => set((state) => {
+  updateExpenseStatus: (id, userId, action, comment) => set((state) => {
     const user = state.users.find(u => u.id === userId);
+    const expense = state.expenses.find(e => e.id === id);
+    if (!expense || !user) return state;
+
+    const isRejecting = action === 'REJECTED';
+    
+    // Logic for moving to next step
+    // In this simplified version, one approval from the correct role moves it forward
+    // unless we implement the multi-approver percentage rule fully.
+    const isLastStep = expense.currentStepIndex >= state.workflow.length - 1;
+    const nextStepIndex = !isRejecting ? expense.currentStepIndex + 1 : expense.currentStepIndex;
+    const finalStatus = isRejecting ? 'REJECTED' : (isLastStep ? 'APPROVED' : 'PENDING');
+
     return {
       expenses: state.expenses.map((exp) => {
         if (exp.id !== id) return exp;
-        
-        const isApproving = status === 'APPROVED';
-        const isRejecting = status === 'REJECTED';
-        const nextStepIndex = isApproving ? exp.currentStepIndex + 1 : exp.currentStepIndex;
-        const finalStatus = isRejecting ? 'REJECTED' : (nextStepIndex >= state.workflow.length ? 'APPROVED' : 'PENDING');
-
         return {
           ...exp,
           status: finalStatus,
@@ -114,8 +137,8 @@ export const useStore = create<ReimburseFlowStore>((set) => ({
             {
               id: Math.random().toString(36).substr(2, 9),
               userId,
-              userName: user?.name || 'Unknown',
-              action: isRejecting ? 'REJECTED' : 'APPROVED',
+              userName: user.name,
+              action: action === 'APPROVED' ? 'APPROVED' : 'REJECTED',
               comment,
               date: new Date().toISOString(),
             },
@@ -126,4 +149,5 @@ export const useStore = create<ReimburseFlowStore>((set) => ({
   }),
 
   setWorkflow: (workflow) => set({ workflow }),
+  setBaseCurrency: (baseCurrency) => set({ baseCurrency }),
 }));

@@ -1,7 +1,7 @@
 "use client"
 
 import Link from 'next/link';
-import { useStore, User } from '@/app/lib/store';
+import { useStore } from '@/app/lib/store';
 import { Button } from '@/components/ui/button';
 import { 
   DropdownMenu, 
@@ -19,11 +19,15 @@ import {
   Settings, 
   LogOut,
   ChevronDown,
-  Activity
+  Users
 } from 'lucide-react';
+import { usePathname } from 'next/navigation';
 
 export function Navbar() {
   const { currentUser, setCurrentUser, users } = useStore();
+  const pathname = usePathname();
+
+  const isActive = (path: string) => pathname === path;
 
   return (
     <nav className="border-b bg-white sticky top-0 z-50">
@@ -37,26 +41,27 @@ export function Navbar() {
               <span className="text-xl font-bold text-primary tracking-tight">ReimburseFlow</span>
             </Link>
             
-            <div className="hidden md:flex items-center space-x-4">
-              <Link href="/dashboard" className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-primary transition-colors">
-                <LayoutDashboard className="w-4 h-4" />
-                Dashboard
-              </Link>
-              <Link href="/expenses/new" className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-primary transition-colors">
-                <PlusCircle className="w-4 h-4" />
-                New Expense
-              </Link>
+            <div className="hidden md:flex items-center space-x-1">
+              <NavLink href="/dashboard" active={isActive('/dashboard')}>
+                <LayoutDashboard className="w-4 h-4" /> Dashboard
+              </NavLink>
+              <NavLink href="/expenses/new" active={isActive('/expenses/new')}>
+                <PlusCircle className="w-4 h-4" /> New Claim
+              </NavLink>
               {(currentUser?.role === 'ADMIN' || currentUser?.role === 'MANAGER' || currentUser?.role === 'FINANCE') && (
-                <Link href="/approvals" className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-primary transition-colors">
-                  <CheckCircle className="w-4 h-4" />
-                  Approvals
-                </Link>
+                <NavLink href="/approvals" active={isActive('/approvals')}>
+                  <CheckCircle className="w-4 h-4" /> Approvals
+                </NavLink>
               )}
               {currentUser?.role === 'ADMIN' && (
-                <Link href="/admin/workflow" className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-primary transition-colors">
-                  <Settings className="w-4 h-4" />
-                  Workflow
-                </Link>
+                <>
+                  <NavLink href="/admin/users" active={isActive('/admin/users')}>
+                    <Users className="w-4 h-4" /> Users
+                  </NavLink>
+                  <NavLink href="/admin/workflow" active={isActive('/admin/workflow')}>
+                    <Settings className="w-4 h-4" /> Workflow
+                  </NavLink>
+                </>
               )}
             </div>
           </div>
@@ -64,31 +69,37 @@ export function Navbar() {
           <div className="flex items-center gap-4">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="relative flex items-center gap-2 hover:bg-muted p-1">
+                <Button variant="ghost" className="relative flex items-center gap-2 hover:bg-muted p-1 h-10 px-2 rounded-full border border-transparent hover:border-muted-foreground/10">
                   <Avatar className="h-8 w-8 border">
                     <AvatarImage src={`https://picsum.photos/seed/${currentUser?.id}/40/40`} />
                     <AvatarFallback>{currentUser?.name.charAt(0)}</AvatarFallback>
                   </Avatar>
-                  <div className="hidden sm:flex flex-col items-start">
-                    <span className="text-sm font-medium leading-none">{currentUser?.name}</span>
-                    <span className="text-[10px] text-muted-foreground uppercase">{currentUser?.role}</span>
+                  <div className="hidden sm:flex flex-col items-start pr-2">
+                    <span className="text-sm font-bold leading-none">{currentUser?.name}</span>
+                    <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">{currentUser?.role}</span>
                   </div>
                   <ChevronDown className="w-4 h-4 text-muted-foreground" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel>Switch User Role (Demo)</DropdownMenuLabel>
+              <DropdownMenuContent align="end" className="w-64">
+                <DropdownMenuLabel>Demo Switchboard</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 {users.map((user) => (
-                  <DropdownMenuItem key={user.id} onClick={() => setCurrentUser(user)} className="cursor-pointer">
-                    <div className="flex flex-col">
-                      <span className={user.id === currentUser?.id ? "font-bold text-primary" : ""}>{user.name}</span>
-                      <span className="text-xs text-muted-foreground">{user.role}</span>
+                  <DropdownMenuItem key={user.id} onClick={() => setCurrentUser(user)} className="cursor-pointer py-3">
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-6 w-6">
+                        <AvatarImage src={`https://picsum.photos/seed/${user.id}/30/30`} />
+                        <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
+                      </Avatar>
+                      <div className="flex flex-col">
+                        <span className={user.id === currentUser?.id ? "font-bold text-primary" : "text-sm"}>{user.name}</span>
+                        <span className="text-[10px] text-muted-foreground font-bold">{user.role}</span>
+                      </div>
                     </div>
                   </DropdownMenuItem>
                 ))}
                 <DropdownMenuSeparator />
-                <DropdownMenuItem className="text-destructive">
+                <DropdownMenuItem className="text-destructive py-3">
                   <LogOut className="w-4 h-4 mr-2" />
                   Sign Out
                 </DropdownMenuItem>
@@ -98,5 +109,20 @@ export function Navbar() {
         </div>
       </div>
     </nav>
+  );
+}
+
+function NavLink({ href, children, active }: { href: string, children: React.ReactNode, active: boolean }) {
+  return (
+    <Link 
+      href={href} 
+      className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+        active 
+          ? "bg-primary/10 text-primary" 
+          : "text-muted-foreground hover:bg-muted hover:text-primary"
+      }`}
+    >
+      {children}
+    </Link>
   );
 }

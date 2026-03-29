@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore } from '@/app/lib/store';
 import { Navbar } from '@/components/layout/Navbar';
@@ -13,18 +13,26 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { extractReceiptDetails } from '@/ai/flows/receipt-ocr-extraction';
 import { detectExpenseFraud } from '@/ai/flows/expense-fraud-detection';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Upload, FileText, Sparkles, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { Loader2, Upload, Sparkles, ShieldCheck, AlertTriangle, Globe } from 'lucide-react';
+
+interface Currency {
+  code: string;
+  name: string;
+}
 
 export default function NewExpense() {
   const router = useRouter();
   const { toast } = useToast();
-  const { currentUser, addExpense } = useStore();
+  const { currentUser, addExpense, baseCurrency } = useStore();
   
   const [loading, setLoading] = useState(false);
   const [extracting, setExtracting] = useState(false);
+  const [currencies, setCurrencies] = useState<Currency[]>([]);
+  const [exchangeRate, setExchangeRate] = useState<number>(1);
   
   const [formData, setFormData] = useState({
     amount: '',
+    currency: 'USD',
     category: '',
     description: '',
     date: new Date().toISOString().split('T')[0],
@@ -36,6 +44,51 @@ export default function NewExpense() {
     reason: string;
     patterns: string[];
   } | null>(null);
+
+  // Fetch Currencies
+  useEffect(() => {
+    async function fetchCurrencies() {
+      try {
+        const res = await fetch('https://restcountries.com/v3.1/all?fields=currencies');
+        const data = await res.json();
+        const codes = new Set<string>();
+        const list: Currency[] = [];
+        
+        data.forEach((country: any) => {
+          if (country.currencies) {
+            Object.keys(country.currencies).forEach(code => {
+              if (!codes.has(code)) {
+                codes.add(code);
+                list.push({ code, name: country.currencies[code].name });
+              }
+            });
+          }
+        });
+        setCurrencies(list.sort((a, b) => a.code.localeCompare(b.code)));
+      } catch (err) {
+        console.error("Failed to fetch currencies", err);
+      }
+    }
+    fetchCurrencies();
+  }, []);
+
+  // Fetch Exchange Rate when currency or base currency changes
+  useEffect(() => {
+    async function fetchRate() {
+      if (formData.currency === baseCurrency) {
+        setExchangeRate(1);
+        return;
+      }
+      try {
+        const res = await fetch(`https://api.exchangerate-api.com/v4/latest/${formData.currency}`);
+        const data = await res.json();
+        setExchangeRate(data.rates[baseCurrency] || 1);
+      } catch (err) {
+        console.error("Failed to fetch exchange rate", err);
+      }
+    }
+    fetchRate();
+  }, [formData.currency, baseCurrency]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -52,13 +105,13 @@ export default function NewExpense() {
         setFormData(prev => ({
           ...prev,
           amount: details.amount.toString(),
-          category: details.category,
-          description: details.vendor,
+          category: details.category || prev.category,
+          description: details.vendor || prev.description,
           date: details.date || prev.date
         }));
         toast({
           title: "Receipt Analyzed",
-          description: `Extracted ${details.vendor} - $${details.amount}`,
+          description: `Extracted ${details.vendor} - ${formData.currency} ${details.amount}`,
         });
       } catch (err) {
         toast({
@@ -78,17 +131,18 @@ export default function NewExpense() {
     if (!currentUser) return;
     
     setLoading(true);
+    const numericAmount = parseFloat(formData.amount);
+    const converted = numericAmount * exchangeRate;
     
     try {
-      // Run AI Fraud Detection before final submission
       if (formData.receiptDataUri) {
         const fraud = await detectExpenseFraud({
           expenseDetails: {
-            amount: parseFloat(formData.amount),
+            amount: numericAmount,
             category: formData.category,
             description: formData.description,
             date: formData.date,
-            merchant: formData.description, // Assuming merchant is the description for this mock
+            merchant: formData.description,
           },
           receiptDataUri: formData.receiptDataUri
         });
@@ -107,7 +161,11 @@ export default function NewExpense() {
       addExpense({
         employeeId: currentUser.id,
         employeeName: currentUser.name,
-        amount: parseFloat(formData.amount),
+        amount: numericAmount,
+        currency: formData.currency,
+        convertedAmount: converted,
+        baseCurrency: baseCurrency,
+        exchangeRate: exchangeRate,
         category: formData.category,
         description: formData.description,
         date: formData.date,
@@ -117,7 +175,7 @@ export default function NewExpense() {
 
       toast({
         title: "Expense Submitted",
-        description: "Your claim has been sent for approval.",
+        description: `Your claim for ${formData.currency} ${numericAmount} (${baseCurrency} ${converted.toFixed(2)}) has been sent.`,
       });
       router.push('/dashboard');
     } catch (err) {
@@ -134,7 +192,7 @@ export default function NewExpense() {
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
-      <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <Card className="shadow-lg border-primary/10">
           <CardHeader className="border-b bg-muted/30">
             <div className="flex items-center justify-between">
@@ -147,7 +205,7 @@ export default function NewExpense() {
           </CardHeader>
           <CardContent className="pt-8">
             <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="receipt">Receipt Photo</Label>
@@ -168,25 +226,55 @@ export default function NewExpense() {
                         ) : (
                           <>
                             <Upload className="h-6 w-6 text-muted-foreground mb-1" />
-                            <span className="text-xs text-muted-foreground">Click or drag to upload</span>
+                            <span className="text-xs text-muted-foreground text-center px-4">Upload receipt for auto-fill</span>
                           </>
                         )}
                       </div>
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="amount">Amount ($)</Label>
-                    <Input 
-                      id="amount" 
-                      type="number" 
-                      step="0.01" 
-                      required 
-                      value={formData.amount} 
-                      onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                      placeholder="0.00"
-                    />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="currency">Currency</Label>
+                      <Select 
+                        value={formData.currency} 
+                        onValueChange={(val) => setFormData({ ...formData, currency: val })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="USD" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-60">
+                          {currencies.map(c => (
+                            <SelectItem key={c.code} value={c.code}>{c.code} - {c.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="amount">Amount</Label>
+                      <Input 
+                        id="amount" 
+                        type="number" 
+                        step="0.01" 
+                        required 
+                        value={formData.amount} 
+                        onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                        placeholder="0.00"
+                      />
+                    </div>
                   </div>
+
+                  {formData.currency !== baseCurrency && formData.amount && (
+                    <div className="p-3 bg-primary/5 rounded-md border border-primary/10 flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-sm text-primary font-medium">
+                        <Globe className="w-4 h-4" />
+                        Estimated Conversion
+                      </div>
+                      <div className="text-sm font-bold">
+                        {baseCurrency} {(parseFloat(formData.amount) * exchangeRate).toFixed(2)}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="space-y-2">
                     <Label htmlFor="date">Date</Label>
@@ -227,10 +315,10 @@ export default function NewExpense() {
                     <Textarea 
                       id="description" 
                       required 
-                      rows={4}
+                      rows={6}
                       value={formData.description} 
                       onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      placeholder="e.g. Lunch with client at Starbucks"
+                      placeholder="e.g. Client dinner at 'The Blue Oyster'"
                     />
                   </div>
                 </div>
@@ -240,7 +328,7 @@ export default function NewExpense() {
                 <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg flex gap-3 items-start animate-in">
                   <AlertTriangle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
                   <div>
-                    <h4 className="font-bold text-destructive text-sm">Potential Fraud Flagged</h4>
+                    <h4 className="font-bold text-destructive text-sm">AI Fraud Guard Flagged</h4>
                     <p className="text-sm text-destructive/80 mt-1">{fraudResult.reason}</p>
                     {fraudResult.patterns.length > 0 && (
                       <ul className="mt-2 text-xs text-destructive/70 list-disc pl-4">
@@ -254,24 +342,27 @@ export default function NewExpense() {
                       className="mt-4 border-destructive text-destructive hover:bg-destructive hover:text-white"
                       onClick={() => setFraudResult(null)}
                     >
-                      I want to correct it
+                      Dismiss and Edit
                     </Button>
                   </div>
                 </div>
               )}
 
               <div className="flex items-center gap-4 pt-4 border-t">
-                <Button type="submit" className="flex-1 gap-2" disabled={loading || extracting}>
-                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
-                  {loading ? "Processing..." : "Submit Claim"}
+                <Button type="submit" className="flex-1 h-12 text-lg gap-2" disabled={loading || extracting}>
+                  {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <ShieldCheck className="w-5 h-5" />}
+                  {loading ? "Processing..." : "Submit for Approval"}
                 </Button>
-                <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>
+                <Button type="button" variant="outline" className="h-12 px-8" onClick={() => router.back()}>Cancel</Button>
               </div>
             </form>
           </CardContent>
-          <CardFooter className="bg-primary/5 text-xs text-muted-foreground flex items-center gap-2">
-            <Sparkles className="w-3 h-3 text-primary" />
-            Smart OCR and Fraud Analysis enabled
+          <CardFooter className="bg-primary/5 text-xs text-muted-foreground flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-3 h-3 text-primary" />
+              Gemini Smart OCR & Fraud Analysis
+            </div>
+            <div className="italic">Powered by ReimburseFlow AI</div>
           </CardFooter>
         </Card>
       </main>
