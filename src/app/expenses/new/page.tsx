@@ -321,7 +321,7 @@ export default function NewExpense() {
               <Sparkles className="w-3.5 h-3.5" />
               Gemini Vision Enabled
             </div>
-            <div className="text-[10px] italic text-muted-foreground font-medium">ReimburseFlow Enterprise v2.0</div>
+            <div className="text-[10px] italic text-muted-foreground font-medium">FlowPay Enterprise v2.0</div>
           </CardFooter>
         </Card>
       </main>

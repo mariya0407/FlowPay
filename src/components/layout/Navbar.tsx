@@ -21,7 +21,7 @@ import {
   ChevronDown,
   Users,
   Building2,
-  FileText
+  CreditCard
 } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 
@@ -37,10 +37,10 @@ export function Navbar() {
         <div className="flex justify-between h-16 items-center">
           <div className="flex items-center gap-6">
             <Link href="/" className="flex items-center gap-2 group">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-white font-bold group-hover:scale-105 transition-transform">
-                RF
+              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-white group-hover:scale-105 transition-transform">
+                <CreditCard className="w-5 h-5" />
               </div>
-              <span className="text-xl font-bold text-primary tracking-tight">ReimburseFlow</span>
+              <span className="text-xl font-bold text-primary tracking-tight">FlowPay</span>
             </Link>
 
             <div className="hidden md:flex items-center gap-2 bg-muted/30 px-3 py-1.5 rounded-full border border-primary/5">

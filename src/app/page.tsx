@@ -8,21 +8,16 @@ import { LayoutDashboard, ShieldCheck, Zap, Activity } from 'lucide-react';
 export default function Home() {
   const router = useRouter();
 
-  useEffect(() => {
-    // For demo purposes, we can either auto-redirect or show a splash
-  }, []);
-
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <main className="flex-1 flex flex-col items-center justify-center p-4">
         <div className="max-w-3xl w-full text-center space-y-8">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium animate-in">
-            <Zap className="w-4 h-4" />
             <span>Efficient. Clear. Intelligent.</span>
           </div>
           
           <h1 className="text-6xl font-black tracking-tighter text-foreground sm:text-7xl">
-            Reimburse<span className="text-primary">Flow</span>
+            Flow<span className="text-primary">Pay</span>
           </h1>
           
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
@@ -65,7 +60,7 @@ export default function Home() {
       </main>
       
       <footer className="py-8 border-t text-center text-sm text-muted-foreground">
-        &copy; 2024 ReimburseFlow. Built for the modern enterprise.
+        &copy; 2024 FlowPay. Built for the modern enterprise.
       </footer>
     </div>
   );

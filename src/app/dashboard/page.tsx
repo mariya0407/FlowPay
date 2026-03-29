@@ -9,17 +9,16 @@ import {
   Wallet, 
   Clock, 
   CheckCircle2, 
-  AlertCircle, 
   Receipt,
   PlusCircle,
   Users,
   Settings,
   ShieldCheck,
-  Building2,
   Briefcase,
   XCircle,
   TrendingUp,
-  FileSearch
+  FileSearch,
+  CreditCard
 } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -58,7 +57,7 @@ export default function Dashboard() {
             <h1 className="text-4xl font-black tracking-tight text-foreground font-headline">Personal Ledger</h1>
             <p className="text-muted-foreground mt-1 text-sm">Reviewing your activity at <span className="font-bold text-primary">{company.name}</span>.</p>
           </div>
-          <TrendingUp className="w-12 h-12 text-primary opacity-10" />
+          <CreditCard className="w-12 h-12 text-primary opacity-10" />
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

@@ -3,7 +3,7 @@ import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
 
 export const metadata: Metadata = {
-  title: 'ReimburseFlow | Modern Expense Management',
+  title: 'FlowPay | Modern Expense Management',
   description: 'Smart receipt OCR and AI-powered fraud detection.',
 };
 
