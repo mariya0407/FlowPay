@@ -93,17 +93,22 @@ interface ReimburseFlowStore {
 
 const initialCompany: Company = { 
   id: 'c1', 
-  name: 'Enterprise Solutions', 
+  name: 'Enterprise Solutions Global', 
   base_currency: 'USD', 
   created_at: new Date().toISOString() 
 };
 
 const initialUsers: User[] = [
-  { id: 'u1', name: 'System Admin', email: 'admin@enterprise.com', role: 'ADMIN', company_id: 'c1', created_at: new Date().toISOString() },
-  { id: 'u2', name: 'Sarah Manager', email: 'sarah@enterprise.com', role: 'MANAGER', company_id: 'c1', created_at: new Date().toISOString() },
-  { id: 'u3', name: 'Frank Finance', email: 'frank@enterprise.com', role: 'FINANCE', company_id: 'c1', created_at: new Date().toISOString() },
-  { id: 'u4', name: 'Diana Director', email: 'diana@enterprise.com', role: 'DIRECTOR', company_id: 'c1', created_at: new Date().toISOString() },
-  { id: 'u5', name: 'Eddie Employee', email: 'eddie@enterprise.com', role: 'EMPLOYEE', company_id: 'c1', manager_id: 'u2', created_at: new Date().toISOString() },
+  { id: 'u1', name: 'Alex Admin', email: 'admin@enterprise.com', role: 'ADMIN', company_id: 'c1', created_at: new Date().toISOString() },
+  { id: 'u2', name: 'Diana Director', email: 'diana@enterprise.com', role: 'DIRECTOR', company_id: 'c1', created_at: new Date().toISOString() },
+  { id: 'u3', name: 'Frank Finance', email: 'finance@enterprise.com', role: 'FINANCE', company_id: 'c1', manager_id: 'u2', created_at: new Date().toISOString() },
+  { id: 'u4', name: 'Sarah Manager (Sales)', email: 'sarah.s@enterprise.com', role: 'MANAGER', company_id: 'c1', manager_id: 'u2', created_at: new Date().toISOString() },
+  { id: 'u5', name: 'James Manager (Ops)', email: 'james.o@enterprise.com', role: 'MANAGER', company_id: 'c1', manager_id: 'u2', created_at: new Date().toISOString() },
+  { id: 'u6', name: 'Eddie Employee', email: 'eddie@enterprise.com', role: 'EMPLOYEE', company_id: 'c1', manager_id: 'u4', created_at: new Date().toISOString() },
+  { id: 'u7', name: 'Alice Sales', email: 'alice@enterprise.com', role: 'EMPLOYEE', company_id: 'c1', manager_id: 'u4', created_at: new Date().toISOString() },
+  { id: 'u8', name: 'Bob Ops', email: 'bob@enterprise.com', role: 'EMPLOYEE', company_id: 'c1', manager_id: 'u5', created_at: new Date().toISOString() },
+  { id: 'u9', name: 'Charlie Ops', email: 'charlie@enterprise.com', role: 'EMPLOYEE', company_id: 'c1', manager_id: 'u5', created_at: new Date().toISOString() },
+  { id: 'u10', name: 'Eve Intern', email: 'eve@enterprise.com', role: 'EMPLOYEE', company_id: 'c1', manager_id: 'u5', created_at: new Date().toISOString() },
 ];
 
 const initialRule: ApprovalRule = {
@@ -117,7 +122,7 @@ const initialRule: ApprovalRule = {
 
 const initialApprovers: RuleApprover[] = [
   { id: 'ra1', rule_id: 'r1', approver_id: 'u3', step_order: 1 },
-  { id: 'ra2', rule_id: 'r1', approver_id: 'u4', step_order: 2 },
+  { id: 'ra2', rule_id: 'r1', approver_id: 'u2', step_order: 2 },
 ];
 
 export const useStore = create<ReimburseFlowStore>((set) => ({
