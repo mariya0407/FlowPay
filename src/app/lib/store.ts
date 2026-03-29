@@ -93,28 +93,40 @@ interface ReimburseFlowStore {
 
 const initialCompany: Company = { 
   id: 'c1', 
-  name: 'Enterprise Solutions Global', 
+  name: 'Nexus Enterprise Solutions', 
   base_currency: 'USD', 
   created_at: new Date().toISOString() 
 };
 
 const initialUsers: User[] = [
-  { id: 'u1', name: 'Alex Admin', email: 'admin@enterprise.com', role: 'ADMIN', company_id: 'c1', created_at: new Date().toISOString() },
-  { id: 'u2', name: 'Diana Director', email: 'diana@enterprise.com', role: 'DIRECTOR', company_id: 'c1', created_at: new Date().toISOString() },
-  { id: 'u3', name: 'Frank Finance', email: 'finance@enterprise.com', role: 'FINANCE', company_id: 'c1', manager_id: 'u2', created_at: new Date().toISOString() },
-  { id: 'u4', name: 'Sarah Manager (Sales)', email: 'sarah.s@enterprise.com', role: 'MANAGER', company_id: 'c1', manager_id: 'u2', created_at: new Date().toISOString() },
-  { id: 'u5', name: 'James Manager (Ops)', email: 'james.o@enterprise.com', role: 'MANAGER', company_id: 'c1', manager_id: 'u2', created_at: new Date().toISOString() },
-  { id: 'u6', name: 'Eddie Employee', email: 'eddie@enterprise.com', role: 'EMPLOYEE', company_id: 'c1', manager_id: 'u4', created_at: new Date().toISOString() },
-  { id: 'u7', name: 'Alice Sales', email: 'alice@enterprise.com', role: 'EMPLOYEE', company_id: 'c1', manager_id: 'u4', created_at: new Date().toISOString() },
-  { id: 'u8', name: 'Bob Ops', email: 'bob@enterprise.com', role: 'EMPLOYEE', company_id: 'c1', manager_id: 'u5', created_at: new Date().toISOString() },
-  { id: 'u9', name: 'Charlie Ops', email: 'charlie@enterprise.com', role: 'EMPLOYEE', company_id: 'c1', manager_id: 'u5', created_at: new Date().toISOString() },
-  { id: 'u10', name: 'Eve Intern', email: 'eve@enterprise.com', role: 'EMPLOYEE', company_id: 'c1', manager_id: 'u5', created_at: new Date().toISOString() },
+  // C-Suite / Root
+  { id: 'u1', name: 'Alex Sterling', email: 'alex.s@nexus.com', role: 'ADMIN', company_id: 'c1', created_at: new Date().toISOString() },
+  { id: 'u2', name: 'Diana Thorne', email: 'diana.t@nexus.com', role: 'DIRECTOR', company_id: 'c1', created_at: new Date().toISOString() },
+  
+  // Finance Dept (Reporting to Director)
+  { id: 'u3', name: 'Frank Miller', email: 'frank.m@nexus.com', role: 'FINANCE', company_id: 'c1', manager_id: 'u2', created_at: new Date().toISOString() },
+  { id: 'u11', name: 'Sarah Vance', email: 'sarah.v@nexus.com', role: 'FINANCE', company_id: 'c1', manager_id: 'u3', created_at: new Date().toISOString() },
+  
+  // Sales Dept (Reporting to Director)
+  { id: 'u4', name: 'Marcus Chen', email: 'marcus.c@nexus.com', role: 'MANAGER', company_id: 'c1', manager_id: 'u2', created_at: new Date().toISOString() },
+  { id: 'u7', name: 'Alice Cooper', email: 'alice.c@nexus.com', role: 'EMPLOYEE', company_id: 'c1', manager_id: 'u4', created_at: new Date().toISOString() },
+  { id: 'u12', name: 'Oscar Wilde', email: 'oscar.w@nexus.com', role: 'EMPLOYEE', company_id: 'c1', manager_id: 'u4', created_at: new Date().toISOString() },
+  
+  // Operations Dept (Reporting to Director)
+  { id: 'u5', name: 'James Holden', email: 'james.h@nexus.com', role: 'MANAGER', company_id: 'c1', manager_id: 'u2', created_at: new Date().toISOString() },
+  { id: 'u8', name: 'Bob Belcher', email: 'bob.b@nexus.com', role: 'EMPLOYEE', company_id: 'c1', manager_id: 'u5', created_at: new Date().toISOString() },
+  { id: 'u9', name: 'Charlie Day', email: 'charlie.d@nexus.com', role: 'EMPLOYEE', company_id: 'c1', manager_id: 'u5', created_at: new Date().toISOString() },
+  { id: 'u10', name: 'Eve Polastri', email: 'eve.p@nexus.com', role: 'EMPLOYEE', company_id: 'c1', manager_id: 'u5', created_at: new Date().toISOString() },
+  
+  // IT / Infrastructure
+  { id: 'u13', name: 'Kevin Flynn', email: 'kevin.f@nexus.com', role: 'MANAGER', company_id: 'c1', manager_id: 'u1', created_at: new Date().toISOString() },
+  { id: 'u14', name: 'Quorra', email: 'quorra@nexus.com', role: 'EMPLOYEE', company_id: 'c1', manager_id: 'u13', created_at: new Date().toISOString() },
 ];
 
 const initialRule: ApprovalRule = {
   id: 'r1',
   company_id: 'c1',
-  name: 'Standard Corporate Policy',
+  name: 'Nexus Master Protocol',
   is_manager_approver: true,
   min_approval_percentage: 100,
   created_at: new Date().toISOString(),
@@ -184,7 +196,6 @@ export const useStore = create<ReimburseFlowStore>((set) => ({
       .sort((a, b) => a.step_order - b.step_order);
 
     configuredApprovers.forEach(ra => {
-      // Avoid duplicate if manager is already in the list
       if (initialApprovals.some(a => a.approver_id === ra.approver_id)) return;
       
       initialApprovals.push({
@@ -215,8 +226,6 @@ export const useStore = create<ReimburseFlowStore>((set) => ({
     const allApprovalsForThisExpense = updatedApprovals.filter(ea => ea.expense_id === expenseId);
     
     const isRejected = status === 'REJECTED';
-    
-    // Logic for finalization
     const approvedCount = allApprovalsForThisExpense.filter(ea => ea.status === 'APPROVED').length;
     const totalSteps = allApprovalsForThisExpense.length;
     const approvalPercentage = totalSteps > 0 ? (approvedCount / totalSteps) * 100 : 0;
