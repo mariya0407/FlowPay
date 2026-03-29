@@ -17,10 +17,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    // Role validation
-    if (!['Employee', 'Manager'].includes(role)) {
-      return NextResponse.json({ error: 'Invalid role' }, { status: 400 });
-    }
+    // Roles are now dynamically string-based, bypassing strict enum validation where the Admin dictates the string.
 
     const existingUser = await prisma.user.findFirst({
       where: { email },
@@ -33,10 +30,9 @@ export async function POST(req: Request) {
     // Manager validation if provided
     if (managerId) {
       const manager = await prisma.user.findFirst({
-        where: {
-          id: managerId,
-          companyId: userSession.companyId,
-          role: { in: ['Manager', 'Admin'] }
+        where: { 
+          id: managerId, 
+          companyId: userSession.companyId 
         },
       });
       if (!manager) {

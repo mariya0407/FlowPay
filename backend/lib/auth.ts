@@ -12,7 +12,7 @@ export function verifyRequest(req: Request) {
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as {
       userId: number;
-      role: 'Employee' | 'Manager' | 'Admin';
+      role: string;
       companyId: number;
     };
     return decoded;

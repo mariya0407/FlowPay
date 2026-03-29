@@ -7,11 +7,7 @@ datasource db {
   provider = "postgresql"
 }
 
-enum UserRole {
-  Employee
-  Manager
-  Admin
-}
+// UserRole enum removed to support dynamic roles
 
 enum ExpenseStatus {
   Draft
@@ -59,7 +55,7 @@ model User {
   name          String          @db.VarChar(255)
   email         String          @db.VarChar(255)
   passwordHash  String          @db.VarChar(255) @map("password_hash")
-  role          UserRole        @default(Employee)
+  role          String          @default("Employee") @db.VarChar(50)
   managerId     Int?            @map("manager_id")
   createdAt     DateTime        @default(now()) @map("created_at")
   updatedAt     DateTime        @default(now()) @updatedAt @map("updated_at")
