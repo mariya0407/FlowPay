@@ -1,0 +1,220 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  Employee
+  Manager
+  Admin
+}
+
+enum ExpenseStatus {
+  Draft
+  Pending
+  InProgress
+  Approved
+  Rejected
+  Paid
+}
+
+enum ApprovalStatus {
+  Pending
+  Approved
+  Rejected
+  Skipped
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  APPROVE
+  REJECT
+}
+
+model Company {
+  id            Int             @id @default(autoincrement())
+  name          String          @db.VarChar(255)
+  baseCurrency  String          @default("USD") @db.VarChar(3) @map("base_currency")
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @default(now()) @updatedAt @map("updated_at")
+
+  users         User[]
+  categories    Category[]
+  rules         ApprovalRule[]
+  expenses      Expense[]
+  auditLogs     AuditLog[]
+
+  @@map("companies")
+}
+
+model User {
+  id            Int             @id @default(autoincrement())
+  companyId     Int             @map("company_id")
+  name          String          @db.VarChar(255)
+  email         String          @db.VarChar(255)
+  passwordHash  String          @db.VarChar(255) @map("password_hash")
+  role          UserRole        @default(Employee)
+  managerId     Int?            @map("manager_id")
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @default(now()) @updatedAt @map("updated_at")
+
+  company       Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  manager       User?           @relation("UserManager", fields: [managerId], references: [id], onDelete: SetNull)
+  subordinates  User[]          @relation("UserManager")
+
+  specialRules  ApprovalRule[]  @relation("SpecialApprover")
+  ruleApprovers RuleApprover[]
+  expenses      Expense[]       @relation("ExpenseSubmitter")
+  approvals     ExpenseApproval[]
+  auditLogs     AuditLog[]      @relation("AuditUser")
+
+  @@unique([companyId, email])
+  @@index([companyId])
+  @@index([managerId])
+  @@index([email])
+  @@map("users")
+}
+
+model Category {
+  id            Int             @id @default(autoincrement())
+  companyId     Int             @map("company_id")
+  name          String          @db.VarChar(100)
+  description   String?         @db.Text
+  createdAt     DateTime        @default(now()) @map("created_at")
+
+  company       Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  expenses      Expense[]
+
+  @@unique([companyId, name])
+  @@index([companyId])
+  @@map("categories")
+}
+
+model ApprovalRule {
+  id                    Int             @id @default(autoincrement())
+  companyId             Int             @map("company_id")
+  name                  String          @db.VarChar(255)
+  isManagerApproval     Boolean         @default(false) @map("is_manager_approval")
+  minApprovalPercentage Decimal?        @default(100.00) @db.Decimal(5, 2) @map("min_approval_percentage")
+  specialApproverId     Int?            @map("special_approver_id")
+  createdAt             DateTime        @default(now()) @map("created_at")
+  updatedAt             DateTime        @default(now()) @updatedAt @map("updated_at")
+
+  company               Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  specialApprover       User?           @relation("SpecialApprover", fields: [specialApproverId], references: [id], onDelete: SetNull)
+  approvers             RuleApprover[]
+  expenses              Expense[]
+
+  @@index([companyId])
+  @@map("approval_rules")
+}
+
+model RuleApprover {
+  id            Int             @id @default(autoincrement())
+  ruleId        Int             @map("rule_id")
+  approverId    Int             @map("approver_id")
+  stepOrder     Int             @map("step_order")
+  createdAt     DateTime        @default(now()) @map("created_at")
+
+  rule          ApprovalRule    @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  approver      User            @relation(fields: [approverId], references: [id], onDelete: Cascade)
+
+  @@unique([ruleId, approverId, stepOrder])
+  @@index([ruleId])
+  @@index([approverId])
+  @@map("rule_approvers")
+}
+
+model Expense {
+  id              Int             @id @default(autoincrement())
+  name            String          @db.VarChar(255)
+  merchant        String?         @db.VarChar(255)
+  userId          Int             @map("user_id")
+  companyId       Int             @map("company_id")
+  categoryId      Int             @map("category_id")
+  ruleId          Int?            @map("rule_id")
+  amount          Decimal         @db.Decimal(15, 2)
+  currency        String          @db.VarChar(3)
+  convertedAmount Decimal         @db.Decimal(15, 2) @map("converted_amount")
+  description     String?         @db.Text
+  expenseDate     DateTime        @db.Date @map("expense_date")
+  status          ExpenseStatus   @default(Pending)
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @default(now()) @updatedAt @map("updated_at")
+
+  user            User            @relation("ExpenseSubmitter", fields: [userId], references: [id], onDelete: Cascade)
+  company         Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  category        Category        @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  rule            ApprovalRule?   @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+  receipt         Receipt[]
+  approvals       ExpenseApproval[]
+
+  @@index([userId])
+  @@index([companyId])
+  @@index([categoryId])
+  @@index([ruleId])
+  @@index([status])
+  @@map("expenses")
+}
+
+model Receipt {
+  id            Int             @id @default(autoincrement())
+  expenseId     Int             @map("expense_id")
+  fileUrl       String          @db.VarChar(1024) @map("file_url")
+  ocrData       Json?           @map("ocr_data")
+  createdAt     DateTime        @default(now()) @map("created_at")
+
+  expense       Expense         @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+
+  @@index([expenseId])
+  @@map("receipts")
+}
+
+model ExpenseApproval {
+  id            Int             @id @default(autoincrement())
+  expenseId     Int             @map("expense_id")
+  approverId    Int             @map("approver_id")
+  stepOrder     Int             @map("step_order")
+  status        ApprovalStatus  @default(Pending)
+  comments      String?         @db.Text
+  actedAt       DateTime?       @map("acted_at")
+  createdAt     DateTime        @default(now()) @map("created_at")
+
+  expense       Expense         @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  approver      User            @relation(fields: [approverId], references: [id], onDelete: Cascade)
+
+  @@unique([expenseId, approverId, stepOrder])
+  @@index([expenseId])
+  @@index([approverId])
+  @@index([status])
+  @@map("expense_approvals")
+}
+
+model AuditLog {
+  id            Int             @id @default(autoincrement())
+  companyId     Int             @map("company_id")
+  userId        Int?            @map("user_id")
+  action        AuditAction
+  entityType    String          @db.VarChar(50) @map("entity_type")
+  entityId      Int             @map("entity_id")
+  oldData       Json?           @map("old_data")
+  newData       Json?           @map("new_data")
+  ipAddress     String?         @db.Inet @map("ip_address")
+  userAgent     String?         @db.Text @map("user_agent")
+  createdAt     DateTime        @default(now()) @map("created_at")
+
+  company       Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user          User?           @relation("AuditUser", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
