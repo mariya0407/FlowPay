@@ -179,6 +179,7 @@ export const useStore = create<ReimburseFlowStore>((set) => ({
       .sort((a, b) => a.step_order - b.step_order);
 
     configuredApprovers.forEach(ra => {
+      // Avoid duplicate if manager is already in the list
       if (initialApprovals.some(a => a.approver_id === ra.approver_id)) return;
       
       initialApprovals.push({
@@ -210,6 +211,7 @@ export const useStore = create<ReimburseFlowStore>((set) => ({
     
     const isRejected = status === 'REJECTED';
     
+    // Logic for finalization
     const approvedCount = allApprovalsForThisExpense.filter(ea => ea.status === 'APPROVED').length;
     const totalSteps = allApprovalsForThisExpense.length;
     const approvalPercentage = totalSteps > 0 ? (approvedCount / totalSteps) * 100 : 0;

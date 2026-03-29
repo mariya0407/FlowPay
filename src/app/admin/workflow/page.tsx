@@ -30,7 +30,7 @@ export default function WorkflowConfig() {
   const [ruleName, setRuleName] = useState(currentRule.name);
   const [isManagerApprover, setIsManagerApprover] = useState(currentRule.is_manager_approver);
   const [minPercentage, setMinPercentage] = useState(currentRule.min_approval_percentage);
-  const [specialApproverId, setSpecialApproverId] = useState(currentRule.special_approver_id || '');
+  const [specialApproverId, setSpecialApproverId] = useState(currentRule.special_approver_id || 'none');
   const [steps, setSteps] = useState(initialSteps.map(s => ({ approver_id: s.approver_id, step_order: s.step_order })));
 
   const addStep = () => {
@@ -57,7 +57,7 @@ export default function WorkflowConfig() {
       name: ruleName,
       is_manager_approver: isManagerApprover,
       min_approval_percentage: minPercentage,
-      special_approver_id: specialApproverId || undefined
+      special_approver_id: specialApproverId === 'none' ? undefined : specialApproverId
     };
 
     updateWorkflow(updatedRule, steps);
@@ -148,7 +148,7 @@ export default function WorkflowConfig() {
                       <SelectValue placeholder="No override assigned" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">None (Disabled)</SelectItem>
+                      <SelectItem value="none">None (Disabled)</SelectItem>
                       {users.filter(u => u.role !== 'EMPLOYEE').map(u => (
                         <SelectItem key={u.id} value={u.id}>{u.name} (Global Master)</SelectItem>
                       ))}
