@@ -11,9 +11,8 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { extractReceiptDetails } from '@/ai/flows/receipt-ocr-extraction';
-import { detectExpenseFraud } from '@/ai/flows/expense-fraud-detection';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Upload, Sparkles, ShieldCheck, AlertTriangle, Globe } from 'lucide-react';
+import { Loader2, Upload, Sparkles, ShieldCheck, Globe } from 'lucide-react';
 
 interface Currency {
   code: string;
@@ -23,17 +22,14 @@ interface Currency {
 export default function NewExpense() {
   const router = useRouter();
   const { toast } = useToast();
-  const { currentUser, addExpense, companies, activeCompanyId, approvalRules } = useStore();
+  const { currentUser, addExpense, company, approvalRules } = useStore();
   
-  const company = companies.find(c => c.id === activeCompanyId);
-  
-  // Security check: Only Employees can create claims
   useEffect(() => {
     if (currentUser && currentUser.role !== 'EMPLOYEE') {
       toast({
         variant: "destructive",
         title: "Access Restricted",
-        description: "Only Employees are authorized to create new expense claims.",
+        description: "Only Employees are authorized to submit personal expense claims.",
       });
       router.push('/dashboard');
     }
@@ -52,12 +48,6 @@ export default function NewExpense() {
     date: new Date().toISOString().split('T')[0],
     receiptDataUri: '',
   });
-
-  const [fraudResult, setFraudResult] = useState<{
-    isFraudulent: boolean;
-    reason: string;
-    patterns: string[];
-  } | null>(null);
 
   useEffect(() => {
     async function fetchCurrencies() {
@@ -119,17 +109,17 @@ export default function NewExpense() {
           ...prev,
           amount: details.amount.toString(),
           category: details.category || prev.category,
-          description: details.vendor || prev.description,
+          description: `${details.vendor}${details.description ? ': ' + details.description : ''}`,
           date: details.date || prev.date
         }));
         toast({
-          title: "Receipt Analyzed",
-          description: `Extracted ${details.vendor} - ${formData.currency} ${details.amount}`,
+          title: "AI Analysis Complete",
+          description: `Extracted ${details.vendor} - ${details.amount} ${formData.currency}`,
         });
       } catch (err) {
         toast({
           variant: "destructive",
-          title: "Extraction Failed",
+          title: "OCR Failed",
           description: "Could not read receipt automatically. Please enter details manually.",
         });
       } finally {
@@ -148,29 +138,6 @@ export default function NewExpense() {
     const converted = numericAmount * exchangeRate;
     
     try {
-      if (formData.receiptDataUri) {
-        const fraud = await detectExpenseFraud({
-          expenseDetails: {
-            amount: numericAmount,
-            category: formData.category,
-            description: formData.description,
-            date: formData.date,
-            merchant: formData.description,
-          },
-          receiptDataUri: formData.receiptDataUri
-        });
-
-        if (fraud.isFraudulent) {
-          setFraudResult({
-            isFraudulent: true,
-            reason: fraud.fraudReason,
-            patterns: fraud.unusualPatterns
-          });
-          setLoading(false);
-          return;
-        }
-      }
-
       addExpense({
         user_id: currentUser.id,
         company_id: company.id,
@@ -184,15 +151,15 @@ export default function NewExpense() {
       }, formData.receiptDataUri);
 
       toast({
-        title: "Expense Submitted",
-        description: `Your claim for ${formData.currency} ${numericAmount} has been sent for approval.`,
+        title: "Claim Submitted",
+        description: `Your expense of ${formData.currency} ${numericAmount} has been entered into the approval workflow.`,
       });
       router.push('/dashboard');
     } catch (err) {
       toast({
         variant: "destructive",
         title: "Submission Error",
-        description: "An error occurred while saving your expense.",
+        description: "An unexpected error occurred during claim processing.",
       });
     } finally {
       setLoading(false);
@@ -205,40 +172,41 @@ export default function NewExpense() {
     <div className="min-h-screen bg-background">
       <Navbar />
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <Card className="shadow-lg border-primary/10">
-          <CardHeader className="border-b bg-muted/30">
+        <Card className="shadow-lg border-primary/10 overflow-hidden">
+          <CardHeader className="border-b bg-muted/30 pb-8">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-2xl font-headline">Submit Expense</CardTitle>
-                <CardDescription>Upload a receipt or fill in the details manually.</CardDescription>
+                <CardTitle className="text-3xl font-black tracking-tight font-headline">Submit Claim</CardTitle>
+                <CardDescription>Scan your receipt for intelligent auto-fill.</CardDescription>
               </div>
-              <Sparkles className="w-8 h-8 text-primary opacity-20" />
+              <Sparkles className="w-10 h-10 text-primary opacity-20" />
             </div>
           </CardHeader>
           <CardContent className="pt-8">
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="receipt">Receipt Photo</Label>
+            <form onSubmit={handleSubmit} className="space-y-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                <div className="space-y-6">
+                  <div className="space-y-3">
+                    <Label htmlFor="receipt" className="text-xs font-black uppercase tracking-widest text-muted-foreground">Digital Artifact (Receipt)</Label>
                     <div className="relative group">
                       <Input 
                         id="receipt" 
                         type="file" 
                         accept="image/*" 
                         onChange={handleFileUpload}
-                        className="cursor-pointer"
+                        className="cursor-pointer opacity-0 absolute inset-0 z-10 h-full w-full"
                       />
-                      <div className="absolute inset-0 pointer-events-none border-2 border-dashed border-muted rounded-md flex flex-col items-center justify-center bg-white/50 group-hover:bg-white transition-colors">
+                      <div className="border-2 border-dashed border-primary/20 rounded-xl p-8 flex flex-col items-center justify-center bg-primary/[0.02] group-hover:bg-primary/5 transition-all min-h-[200px]">
                         {extracting ? (
                           <div className="flex flex-col items-center">
-                            <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                            <span className="text-xs mt-1 text-primary">Analyzing...</span>
+                            <Loader2 className="h-10 w-10 animate-spin text-primary mb-4" />
+                            <span className="text-sm font-black text-primary animate-pulse">Running OCR Analysis...</span>
                           </div>
                         ) : (
                           <>
-                            <Upload className="h-6 w-6 text-muted-foreground mb-1" />
-                            <span className="text-xs text-muted-foreground text-center px-4">Upload receipt for auto-fill</span>
+                            <Upload className="h-10 w-10 text-primary/40 mb-3 group-hover:scale-110 transition-transform" />
+                            <span className="text-sm font-bold text-primary/60">Upload Receipt</span>
+                            <span className="text-[10px] text-muted-foreground mt-1">Images only (JPG, PNG)</span>
                           </>
                         )}
                       </div>
@@ -252,7 +220,7 @@ export default function NewExpense() {
                         value={formData.currency} 
                         onValueChange={(val) => setFormData({ ...formData, currency: val })}
                       >
-                        <SelectTrigger>
+                        <SelectTrigger className="border-primary/10">
                           <SelectValue placeholder="USD" />
                         </SelectTrigger>
                         <SelectContent className="max-h-60">
@@ -271,45 +239,47 @@ export default function NewExpense() {
                         required 
                         value={formData.amount} 
                         onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                        className="border-primary/10"
                         placeholder="0.00"
                       />
                     </div>
                   </div>
 
-                  {company?.base_currency && formData.currency !== company.base_currency && formData.amount && (
-                    <div className="p-3 bg-primary/5 rounded-md border border-primary/10 flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-sm text-primary font-medium">
+                  {formData.currency !== company.base_currency && formData.amount && (
+                    <div className="p-4 bg-emerald-50/50 rounded-lg border border-emerald-100 flex items-center justify-between animate-in">
+                      <div className="flex items-center gap-2 text-xs text-emerald-700 font-black uppercase tracking-wider">
                         <Globe className="w-4 h-4" />
-                        Estimated Conversion
+                        Conversion
                       </div>
-                      <div className="text-sm font-bold">
+                      <div className="text-sm font-black text-emerald-700">
                         {company.base_currency} {(parseFloat(formData.amount) * exchangeRate).toFixed(2)}
                       </div>
                     </div>
                   )}
 
                   <div className="space-y-2">
-                    <Label htmlFor="date">Date</Label>
+                    <Label htmlFor="date">Transaction Date</Label>
                     <Input 
                       id="date" 
                       type="date" 
                       required 
                       value={formData.date} 
                       onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                      className="border-primary/10"
                     />
                   </div>
                 </div>
 
-                <div className="space-y-4">
+                <div className="space-y-6">
                   <div className="space-y-2">
-                    <Label htmlFor="category">Category</Label>
+                    <Label htmlFor="category">Expense Type</Label>
                     <Select 
                       value={formData.category} 
                       onValueChange={(val) => setFormData({ ...formData, category: val })}
                       required
                     >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select category" />
+                      <SelectTrigger className="border-primary/10">
+                        <SelectValue placeholder="Select type..." />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="Food">Food & Dining</SelectItem>
@@ -317,64 +287,41 @@ export default function NewExpense() {
                         <SelectItem value="Office Supplies">Office Supplies</SelectItem>
                         <SelectItem value="Entertainment">Entertainment</SelectItem>
                         <SelectItem value="Utilities">Utilities</SelectItem>
-                        <SelectItem value="Other">Other</SelectItem>
+                        <SelectItem value="Other">Miscellaneous</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="description">Vendor / Description</Label>
+                    <Label htmlFor="description">Vendor / Details</Label>
                     <Textarea 
                       id="description" 
                       required 
-                      rows={6}
+                      rows={8}
                       value={formData.description} 
                       onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      placeholder="e.g. Client dinner at 'The Blue Oyster'"
+                      className="border-primary/10 bg-muted/5"
+                      placeholder="e.g. Starbucks - Morning client coffee"
                     />
                   </div>
                 </div>
               </div>
 
-              {fraudResult?.isFraudulent && (
-                <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg flex gap-3 items-start animate-in">
-                  <AlertTriangle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
-                  <div>
-                    <h4 className="font-bold text-destructive text-sm">AI Fraud Guard Flagged</h4>
-                    <p className="text-sm text-destructive/80 mt-1">{fraudResult.reason}</p>
-                    {fraudResult.patterns.length > 0 && (
-                      <ul className="mt-2 text-xs text-destructive/70 list-disc pl-4">
-                        {fraudResult.patterns.map((p, i) => <li key={i}>{p}</li>)}
-                      </ul>
-                    )}
-                    <Button 
-                      type="button" 
-                      variant="outline" 
-                      size="sm" 
-                      className="mt-4 border-destructive text-destructive hover:bg-destructive hover:text-white"
-                      onClick={() => setFraudResult(null)}
-                    >
-                      Dismiss and Edit
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex items-center gap-4 pt-4 border-t">
-                <Button type="submit" className="flex-1 h-12 text-lg gap-2" disabled={loading || extracting}>
+              <div className="flex items-center gap-4 pt-8 border-t">
+                <Button type="submit" className="flex-1 h-14 text-lg font-black tracking-widest uppercase gap-2" disabled={loading || extracting}>
                   {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <ShieldCheck className="w-5 h-5" />}
-                  {loading ? "Processing..." : "Submit for Approval"}
+                  {loading ? "Filing Claim..." : "Submit for Approval"}
                 </Button>
-                <Button type="button" variant="outline" className="h-12 px-8" onClick={() => router.back()}>Cancel</Button>
+                <Button type="button" variant="outline" className="h-14 px-8 font-bold border-primary/20" onClick={() => router.back()}>Cancel</Button>
               </div>
             </form>
           </CardContent>
-          <CardFooter className="bg-primary/5 text-xs text-muted-foreground flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-3 h-3 text-primary" />
-              Gemini Smart OCR & Fraud Analysis
+          <CardFooter className="bg-primary/5 py-4 px-6 flex items-center justify-between border-t border-primary/10">
+            <div className="flex items-center gap-2 text-[10px] font-black uppercase text-primary/60 tracking-widest">
+              <Sparkles className="w-3.5 h-3.5" />
+              Gemini Vision Enabled
             </div>
-            <div className="italic">Powered by ReimburseFlow AI</div>
+            <div className="text-[10px] italic text-muted-foreground font-medium">ReimburseFlow Enterprise v2.0</div>
           </CardFooter>
         </Card>
       </main>

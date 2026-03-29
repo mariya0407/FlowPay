@@ -8,22 +8,19 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { UserPlus, Search, Edit2, Trash2, Building2, User as UserIcon, CheckCircle2 } from 'lucide-react';
+import { UserPlus, Search, Edit2, Trash2, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Checkbox } from '@/components/ui/checkbox';
 
 export default function UserManagement() {
-  const { users, updateUser, companies, activeCompanyId } = useStore();
+  const { users, updateUser, company } = useStore();
   const { toast } = useToast();
   const [search, setSearch] = useState('');
 
-  // Filter users who belong to the active company
   const filteredUsers = users.filter(u => 
-    u.company_ids.includes(activeCompanyId) &&
-    (u.name.toLowerCase().includes(search.toLowerCase()) || 
-     u.email.toLowerCase().includes(search.toLowerCase()))
+    u.name.toLowerCase().includes(search.toLowerCase()) || 
+    u.email.toLowerCase().includes(search.toLowerCase())
   );
 
   const handleRoleChange = (id: string, role: UserRole) => {
@@ -36,35 +33,14 @@ export default function UserManagement() {
     toast({ title: "Hierarchy Updated", description: "Manager assigned successfully" });
   };
 
-  const handleCompanyToggle = (userId: string, companyId: string) => {
-    const user = users.find(u => u.id === userId);
-    if (!user) return;
-
-    let newIds = [...user.company_ids];
-    if (newIds.includes(companyId)) {
-      if (newIds.length === 1) {
-        toast({ variant: "destructive", title: "Action Blocked", description: "User must belong to at least one organization." });
-        return;
-      }
-      newIds = newIds.filter(id => id !== companyId);
-    } else {
-      newIds.push(companyId);
-    }
-    
-    updateUser(userId, { company_ids: newIds });
-    toast({ title: "Organization Access Updated", description: "User permissions synchronized." });
-  };
-
-  const activeCompany = companies.find(c => c.id === activeCompanyId);
-
   return (
     <div className="min-h-screen bg-background font-body">
       <Navbar />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <header className="mb-8 flex justify-between items-center">
           <div>
-            <h1 className="text-4xl font-black tracking-tight text-foreground font-headline">Staffing Control</h1>
-            <p className="text-muted-foreground mt-1">Manage personnel for <span className="font-bold text-primary">{activeCompany?.name}</span>.</p>
+            <h1 className="text-4xl font-black tracking-tight text-foreground font-headline">Corporate Directory</h1>
+            <p className="text-muted-foreground mt-1 text-sm">Managing personnel and hierarchies for <span className="font-bold text-primary">{company.name}</span>.</p>
           </div>
           <Button className="gap-2">
             <UserPlus className="w-4 h-4" /> Add Member
@@ -75,13 +51,13 @@ export default function UserManagement() {
           <CardHeader className="bg-muted/10 border-b">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle>Member Directory</CardTitle>
-                <CardDescription>Assign roles and cross-organizational access.</CardDescription>
+                <CardTitle>Member Control</CardTitle>
+                <CardDescription>Configure system roles and direct reporting lines.</CardDescription>
               </div>
               <div className="relative w-72">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input 
-                  placeholder="Filter by name or email..." 
+                  placeholder="Filter users..." 
                   className="pl-9 h-10"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -95,9 +71,8 @@ export default function UserManagement() {
                 <TableRow className="bg-muted/5">
                   <TableHead className="pl-6">Profile</TableHead>
                   <TableHead>System Role</TableHead>
-                  <TableHead>Direct Manager</TableHead>
-                  <TableHead>Active in Orgs</TableHead>
-                  <TableHead className="text-right pr-6">Management</TableHead>
+                  <TableHead>Reporting To</TableHead>
+                  <TableHead className="text-right pr-6">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -126,6 +101,8 @@ export default function UserManagement() {
                         <SelectContent>
                           <SelectItem value="EMPLOYEE">Employee</SelectItem>
                           <SelectItem value="MANAGER">Manager</SelectItem>
+                          <SelectItem value="FINANCE">Finance</SelectItem>
+                          <SelectItem value="DIRECTOR">Director</SelectItem>
                           <SelectItem value="ADMIN">Admin</SelectItem>
                         </SelectContent>
                       </Select>
@@ -139,26 +116,14 @@ export default function UserManagement() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="none">No Direct Report</SelectItem>
+                          <SelectItem value="none">No Manager</SelectItem>
                           {users
-                            .filter(u => u.id !== user.id && (u.role === 'MANAGER' || u.role === 'ADMIN'))
+                            .filter(u => u.id !== user.id && ['MANAGER', 'DIRECTOR', 'ADMIN'].includes(u.role))
                             .map(m => (
-                              <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                              <SelectItem key={m.id} value={m.id}>{m.name} ({m.role})</SelectItem>
                             ))}
                         </SelectContent>
                       </Select>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1 max-w-[200px]">
-                        {user.company_ids.map(cid => {
-                          const c = companies.find(com => com.id === cid);
-                          return (
-                            <span key={cid} className="text-[9px] px-1.5 py-0.5 bg-primary/10 text-primary rounded font-black uppercase">
-                              {c?.name.substring(0, 10)}
-                            </span>
-                          );
-                        })}
-                      </div>
                     </TableCell>
                     <TableCell className="text-right pr-6">
                       <div className="flex justify-end gap-1">

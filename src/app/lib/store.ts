@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type UserRole = 'ADMIN' | 'MANAGER' | 'EMPLOYEE';
+export type UserRole = 'ADMIN' | 'MANAGER' | 'EMPLOYEE' | 'FINANCE' | 'DIRECTOR';
 
 export interface Company {
   id: string;
@@ -14,7 +14,7 @@ export interface User {
   name: string;
   email: string;
   role: UserRole;
-  company_ids: string[];
+  company_id: string;
   manager_id?: string;
   created_at: string;
 }
@@ -25,7 +25,7 @@ export interface ApprovalRule {
   name: string;
   is_manager_approver: boolean;
   min_approval_percentage: number;
-  special_approver_id?: string; // e.g., CFO for auto-approval
+  special_approver_id?: string; 
   created_at: string;
 }
 
@@ -73,8 +73,7 @@ export interface ExpenseApproval {
 }
 
 interface ReimburseFlowStore {
-  companies: Company[];
-  activeCompanyId: string;
+  company: Company;
   currentUser: User | null;
   users: User[];
   expenses: Expense[];
@@ -84,8 +83,7 @@ interface ReimburseFlowStore {
   expenseApprovals: ExpenseApproval[];
   
   setCurrentUser: (user: User | null) => void;
-  setActiveCompany: (id: string) => void;
-  addCompany: (company: Omit<Company, 'id' | 'created_at'>) => void;
+  updateCompany: (updates: Partial<Company>) => void;
   addUser: (user: User) => void;
   updateUser: (id: string, updates: Partial<User>) => void;
   addExpense: (expense: Omit<Expense, 'id' | 'created_at' | 'status'>, receiptDataUri?: string) => void;
@@ -93,33 +91,37 @@ interface ReimburseFlowStore {
   updateWorkflow: (rule: ApprovalRule, approvers: Omit<RuleApprover, 'id' | 'rule_id'>[]) => void;
 }
 
-const initialCompanies: Company[] = [
-  { id: 'c1', name: 'Global Corp', base_currency: 'USD', created_at: new Date().toISOString() },
-];
+const initialCompany: Company = { 
+  id: 'c1', 
+  name: 'Enterprise Solutions', 
+  base_currency: 'USD', 
+  created_at: new Date().toISOString() 
+};
 
 const initialUsers: User[] = [
-  { id: 'u1', name: 'Alice Admin', email: 'alice@company.com', role: 'ADMIN', company_ids: ['c1'], created_at: new Date().toISOString() },
-  { id: 'u2', name: 'Bob Manager', email: 'bob@company.com', role: 'MANAGER', company_ids: ['c1'], created_at: new Date().toISOString() },
-  { id: 'u3', name: 'David Employee', email: 'david@company.com', role: 'EMPLOYEE', company_ids: ['c1'], manager_id: 'u2', created_at: new Date().toISOString() },
+  { id: 'u1', name: 'System Admin', email: 'admin@enterprise.com', role: 'ADMIN', company_id: 'c1', created_at: new Date().toISOString() },
+  { id: 'u2', name: 'Sarah Manager', email: 'sarah@enterprise.com', role: 'MANAGER', company_id: 'c1', created_at: new Date().toISOString() },
+  { id: 'u3', name: 'Frank Finance', email: 'frank@enterprise.com', role: 'FINANCE', company_id: 'c1', created_at: new Date().toISOString() },
+  { id: 'u4', name: 'Diana Director', email: 'diana@enterprise.com', role: 'DIRECTOR', company_id: 'c1', created_at: new Date().toISOString() },
+  { id: 'u5', name: 'Eddie Employee', email: 'eddie@enterprise.com', role: 'EMPLOYEE', company_id: 'c1', manager_id: 'u2', created_at: new Date().toISOString() },
 ];
 
 const initialRule: ApprovalRule = {
   id: 'r1',
   company_id: 'c1',
-  name: 'Standard Approval',
+  name: 'Standard Corporate Policy',
   is_manager_approver: true,
   min_approval_percentage: 100,
   created_at: new Date().toISOString(),
 };
 
 const initialApprovers: RuleApprover[] = [
-  { id: 'ra1', rule_id: 'r1', approver_id: 'u2', step_order: 1 },
-  { id: 'ra2', rule_id: 'r1', approver_id: 'u1', step_order: 2 },
+  { id: 'ra1', rule_id: 'r1', approver_id: 'u3', step_order: 1 },
+  { id: 'ra2', rule_id: 'r1', approver_id: 'u4', step_order: 2 },
 ];
 
 export const useStore = create<ReimburseFlowStore>((set) => ({
-  companies: initialCompanies,
-  activeCompanyId: 'c1',
+  company: initialCompany,
   currentUser: initialUsers[0],
   users: initialUsers,
   expenses: [],
@@ -129,14 +131,9 @@ export const useStore = create<ReimburseFlowStore>((set) => ({
   expenseApprovals: [],
 
   setCurrentUser: (user) => set({ currentUser: user }),
-  setActiveCompany: (id) => set({ activeCompanyId: id }),
   
-  addCompany: (companyData) => set((state) => ({
-    companies: [...state.companies, { 
-      ...companyData, 
-      id: Math.random().toString(36).substr(2, 9), 
-      created_at: new Date().toISOString() 
-    }]
+  updateCompany: (updates) => set((state) => ({
+    company: { ...state.company, ...updates }
   })),
 
   addUser: (user) => set((state) => ({ users: [...state.users, user] })),
@@ -166,7 +163,6 @@ export const useStore = create<ReimburseFlowStore>((set) => ({
     const initialApprovals: ExpenseApproval[] = [];
     let currentOrder = 1;
 
-    // 1. Check if Manager Approval is mandatory
     if (rule?.is_manager_approver && submitter?.manager_id) {
       initialApprovals.push({
         id: Math.random().toString(36).substr(2, 9),
@@ -178,13 +174,11 @@ export const useStore = create<ReimburseFlowStore>((set) => ({
       });
     }
 
-    // 2. Add defined Rule Approvers
     const configuredApprovers = state.ruleApprovers
       .filter(ra => ra.rule_id === expenseData.rule_id)
       .sort((a, b) => a.step_order - b.step_order);
 
     configuredApprovers.forEach(ra => {
-      // Don't duplicate if manager is already first
       if (initialApprovals.some(a => a.approver_id === ra.approver_id)) return;
       
       initialApprovals.push({
@@ -214,22 +208,16 @@ export const useStore = create<ReimburseFlowStore>((set) => ({
     const rule = state.approvalRules.find(r => r.id === expense?.rule_id);
     const allApprovalsForThisExpense = updatedApprovals.filter(ea => ea.expense_id === expenseId);
     
-    // Check Rejection
-    const isRejected = allApprovalsForThisExpense.some(ea => ea.status === 'REJECTED');
+    const isRejected = status === 'REJECTED';
     
-    // Check Conditional Rules
     const approvedCount = allApprovalsForThisExpense.filter(ea => ea.status === 'APPROVED').length;
     const totalSteps = allApprovalsForThisExpense.length;
     const approvalPercentage = totalSteps > 0 ? (approvedCount / totalSteps) * 100 : 0;
     
-    // Percentage Rule
     const meetsPercentage = approvalPercentage >= (rule?.min_approval_percentage || 100);
-    
-    // Special Approver Rule (CFO/Director)
     const specialApproverActed = allApprovalsForThisExpense.find(ea => ea.approver_id === rule?.special_approver_id);
     const specialApproved = specialApproverActed?.status === 'APPROVED';
     
-    // Fully Approved means either 100% sequential completion OR hybrid condition met
     const isFullyApproved = (approvedCount === totalSteps) || meetsPercentage || specialApproved;
 
     let finalStatus: ExpenseStatus = 'PENDING';

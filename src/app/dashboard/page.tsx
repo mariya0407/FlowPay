@@ -16,19 +16,19 @@ import {
   Settings,
   ShieldCheck,
   Building2,
-  Briefcase
+  Briefcase,
+  XCircle,
+  TrendingUp,
+  FileSearch
 } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 export default function Dashboard() {
-  const { currentUser, expenses, users, companies, activeCompanyId } = useStore();
+  const { currentUser, expenses, users, company } = useStore();
 
   if (!currentUser) return null;
-
-  const currentCompany = companies.find(c => c.id === activeCompanyId);
-  const companyExpenses = expenses.filter(e => e.company_id === activeCompanyId);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -48,7 +48,7 @@ export default function Dashboard() {
   };
 
   const renderEmployeeDashboard = () => {
-    const myExpenses = companyExpenses.filter(e => e.user_id === currentUser.id);
+    const myExpenses = expenses.filter(e => e.user_id === currentUser.id);
     const stats = getStats(myExpenses);
 
     return (
@@ -56,107 +56,105 @@ export default function Dashboard() {
         <header className="mb-8 flex justify-between items-end">
           <div>
             <h1 className="text-4xl font-black tracking-tight text-foreground font-headline">Personal Ledger</h1>
-            <p className="text-muted-foreground mt-1">Reviewing your activity in <span className="font-bold text-primary">{currentCompany?.name}</span>.</p>
+            <p className="text-muted-foreground mt-1 text-sm">Reviewing your activity at <span className="font-bold text-primary">{company.name}</span>.</p>
           </div>
-          <Building2 className="w-12 h-12 text-primary opacity-10" />
+          <TrendingUp className="w-12 h-12 text-primary opacity-10" />
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <StatCard title="Total Submitted" value={`${currentCompany?.base_currency} ${stats.total.toLocaleString()}`} icon={<Wallet className="h-4 w-4 text-primary" />} subtitle={`${myExpenses.length} claims in this org`} />
-          <StatCard title="Awaiting Approval" value={stats.pending} icon={<Clock className="h-4 w-4 text-amber-500" />} subtitle="Pending items" />
-          <StatCard title="Approved Claims" value={stats.approved} icon={<CheckCircle2 className="h-4 w-4 text-emerald-500" />} subtitle="Ready for payment" />
-          <StatCard title="Rejected" value={stats.rejected} icon={<AlertCircle className="h-4 w-4 text-destructive" />} subtitle="Requires attention" />
+          <StatCard title="Total Spent" value={`${company.base_currency} ${stats.total.toLocaleString()}`} icon={<Wallet className="h-4 w-4 text-primary" />} subtitle={`${myExpenses.length} total claims`} />
+          <StatCard title="In Review" value={stats.pending} icon={<Clock className="h-4 w-4 text-amber-500" />} subtitle="Awaiting approval" />
+          <StatCard title="Paid Out" value={stats.approved} icon={<CheckCircle2 className="h-4 w-4 text-emerald-500" />} subtitle="Finalized claims" />
+          <StatCard title="Denied" value={stats.rejected} icon={<XCircle className="h-4 w-4 text-destructive" />} subtitle="Claims needing edits" />
         </div>
 
         <ExpenseTable 
-          title="Recent Organization Submissions" 
+          title="Recent Submissions" 
           expenses={myExpenses.slice(0, 5)} 
           showBadge={getStatusBadge} 
-          emptyMessage="No expenses submitted for this company." 
+          emptyMessage="You haven't submitted any expenses yet." 
           users={users} 
-          baseCurrency={currentCompany?.base_currency || 'USD'}
+          baseCurrency={company.base_currency}
           showCreateButton={true}
         />
       </div>
     );
   };
 
-  const renderManagerDashboard = () => {
+  const renderApproverDashboard = () => {
+    // For Managers, Finance, and Directors
     const teamUserIds = users.filter(u => u.manager_id === currentUser.id).map(u => u.id);
-    const teamExpenses = companyExpenses.filter(e => teamUserIds.includes(e.user_id));
-    const teamStats = getStats(teamExpenses);
+    const relevantExpenses = currentUser.role === 'ADMIN' ? expenses : expenses.filter(e => teamUserIds.includes(e.user_id));
+    const stats = getStats(relevantExpenses);
 
     return (
       <div className="space-y-8 animate-in">
         <header className="mb-8 flex justify-between items-end">
           <div>
-            <h1 className="text-4xl font-black tracking-tight text-foreground font-headline">Command Center</h1>
-            <p className="text-muted-foreground mt-1">Managing team activity for <span className="font-bold text-primary">{currentCompany?.name}</span>.</p>
+            <h1 className="text-4xl font-black tracking-tight text-foreground font-headline">Review Hub</h1>
+            <p className="text-muted-foreground mt-1 text-sm">Overseeing departmental spend for <span className="font-bold text-primary">{company.name}</span>.</p>
           </div>
           <Briefcase className="w-12 h-12 text-primary opacity-10" />
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <StatCard title="Team Total Spend" value={`${currentCompany?.base_currency} ${teamStats.total.toLocaleString()}`} icon={<Users className="h-4 w-4 text-primary" />} subtitle={`${teamExpenses.length} total team claims`} />
-          <StatCard title="Team Pending" value={teamStats.pending} icon={<Clock className="h-4 w-4 text-amber-500" />} subtitle="Review required" />
-          <StatCard title="Team Members" value={teamUserIds.length} icon={<Users className="h-4 w-4 text-muted-foreground" />} subtitle="Direct reports in this org" />
+          <StatCard title="Scope Volume" value={`${company.base_currency} ${stats.total.toLocaleString()}`} icon={<Receipt className="h-4 w-4 text-primary" />} subtitle="Total tracked volume" />
+          <StatCard title="Awaiting You" value={stats.pending} icon={<Clock className="h-4 w-4 text-amber-500" />} subtitle="Action required" />
+          <StatCard title="Processed" value={stats.approved} icon={<CheckCircle2 className="h-4 w-4 text-emerald-500" />} subtitle="Approved by you" />
           <Link href="/approvals" className="block h-full">
             <Card className="hover:border-primary transition-all bg-primary/5 cursor-pointer h-full border-primary/20 group">
               <CardContent className="pt-6 flex flex-col items-center justify-center h-full space-y-2">
-                <CheckCircle2 className="h-8 w-8 text-primary group-hover:scale-110 transition-transform" />
-                <div className="font-bold text-lg">Enter Review Queue</div>
-                <p className="text-[10px] text-muted-foreground font-bold uppercase">Approvals Dashboard</p>
+                <ShieldCheck className="h-8 w-8 text-primary group-hover:scale-110 transition-transform" />
+                <div className="font-bold text-lg">Open Approvals</div>
+                <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">Action Queue</p>
               </CardContent>
             </Card>
           </Link>
         </div>
 
-        <div className="grid grid-cols-1 gap-8">
-          <ExpenseTable 
-            title="Team Activity" 
-            expenses={teamExpenses.slice(0, 10)} 
-            showBadge={getStatusBadge} 
-            emptyMessage="No team activity for this organization." 
-            users={users} 
-            baseCurrency={currentCompany?.base_currency || 'USD'}
-            showCreateButton={false}
-          />
-        </div>
+        <ExpenseTable 
+          title="Review Queue Activity" 
+          expenses={relevantExpenses.slice(0, 10)} 
+          showBadge={getStatusBadge} 
+          emptyMessage="No activity in your oversight scope." 
+          users={users} 
+          baseCurrency={company.base_currency}
+          showCreateButton={false}
+        />
       </div>
     );
   };
 
   const renderAdminDashboard = () => {
-    const stats = getStats(companyExpenses);
+    const stats = getStats(expenses);
 
     return (
       <div className="space-y-8 animate-in">
         <header className="mb-8 flex justify-between items-end">
           <div>
-            <h1 className="text-4xl font-black tracking-tight text-foreground font-headline">Enterprise Hub</h1>
-            <p className="text-muted-foreground mt-1">Global oversight for <span className="font-bold text-primary">{currentCompany?.name}</span>.</p>
+            <h1 className="text-4xl font-black tracking-tight text-foreground font-headline">Organization Oversight</h1>
+            <p className="text-muted-foreground mt-1 text-sm">Global system control for <span className="font-bold text-primary">{company.name}</span>.</p>
           </div>
           <div className="flex gap-2">
-            <Link href="/admin/companies"><Button variant="outline" size="sm" className="gap-2 border-primary/20"><Building2 className="w-4 h-4" /> All Orgs</Button></Link>
-            <Link href="/admin/users"><Button variant="outline" size="sm" className="gap-2 border-primary/20"><Users className="w-4 h-4" /> Users</Button></Link>
-            <Link href="/admin/workflow"><Button variant="outline" size="sm" className="gap-2 border-primary/20"><Settings className="w-4 h-4" /> Rules</Button></Link>
+            <Link href="/admin/users"><Button variant="outline" size="sm" className="gap-2 border-primary/20"><Users className="w-4 h-4" /> User Base</Button></Link>
+            <Link href="/admin/workflow"><Button variant="outline" size="sm" className="gap-2 border-primary/20"><Settings className="w-4 h-4" /> Rules Engine</Button></Link>
           </div>
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <StatCard title="Company Total" value={`${currentCompany?.base_currency} ${stats.total.toLocaleString()}`} icon={<ShieldCheck className="h-4 w-4 text-primary" />} subtitle="Across all active users" />
-          <StatCard title="Company Staff" value={users.filter(u => u.company_ids.includes(activeCompanyId)).length} icon={<Users className="h-4 w-4 text-accent" />} subtitle="Total employees" />
-          <StatCard title="Pending Review" value={stats.pending} icon={<Clock className="h-4 w-4 text-amber-500" />} subtitle="Queue volume" />
-          <StatCard title="Total Claims" value={companyExpenses.length} icon={<Receipt className="h-4 w-4 text-primary" />} subtitle="Historical volume" />
+          <StatCard title="Global Spend" value={`${company.base_currency} ${stats.total.toLocaleString()}`} icon={<Wallet className="h-4 w-4 text-primary" />} subtitle="All claims combined" />
+          <StatCard title="Org Users" value={users.length} icon={<Users className="h-4 w-4 text-accent" />} subtitle="Across all levels" />
+          <StatCard title="Active Pending" value={stats.pending} icon={<Clock className="h-4 w-4 text-amber-500" />} subtitle="Total volume" />
+          <StatCard title="Rejected Audit" value={stats.rejected} icon={<XCircle className="h-4 w-4 text-destructive" />} subtitle="Denial history" />
         </div>
 
         <ExpenseTable 
-          title="Active Submissions" 
-          expenses={companyExpenses.slice(0, 10)} 
+          title="All Submissions Ledger" 
+          expenses={expenses} 
           showBadge={getStatusBadge} 
-          emptyMessage="No activity found for this company." 
+          emptyMessage="No system activity recorded yet." 
           users={users} 
-          baseCurrency={currentCompany?.base_currency || 'USD'}
+          baseCurrency={company.base_currency}
           showCreateButton={false}
         />
       </div>
@@ -167,9 +165,9 @@ export default function Dashboard() {
     <div className="min-h-screen bg-background">
       <Navbar />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {currentUser.role === 'ADMIN' && renderAdminDashboard()}
-        {currentUser.role === 'MANAGER' && renderManagerDashboard()}
-        {currentUser.role === 'EMPLOYEE' && renderEmployeeDashboard()}
+        {currentUser.role === 'ADMIN' ? renderAdminDashboard() : 
+         ['MANAGER', 'FINANCE', 'DIRECTOR'].includes(currentUser.role) ? renderApproverDashboard() : 
+         renderEmployeeDashboard()}
       </main>
     </div>
   );
@@ -210,7 +208,7 @@ function ExpenseTable({ title, expenses, showBadge, emptyMessage, users, baseCur
               <TableRow className="bg-muted/5">
                 <TableHead className="pl-6">Date</TableHead>
                 <TableHead>User</TableHead>
-                <TableHead>Vendor</TableHead>
+                <TableHead>Vendor/Description</TableHead>
                 <TableHead>Amount</TableHead>
                 <TableHead className="pr-6">Status</TableHead>
               </TableRow>
@@ -240,7 +238,7 @@ function ExpenseTable({ title, expenses, showBadge, emptyMessage, users, baseCur
           </Table>
         ) : (
           <div className="text-center py-20 border-2 border-dashed rounded-lg border-muted/20 m-6">
-            <Receipt className="w-10 h-10 text-muted mx-auto mb-2 opacity-10" />
+            <FileSearch className="w-10 h-10 text-muted mx-auto mb-2 opacity-10" />
             <p className="text-sm text-muted-foreground font-medium">{emptyMessage}</p>
           </div>
         )}

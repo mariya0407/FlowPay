@@ -21,15 +21,13 @@ import {
   ChevronDown,
   Users,
   Building2,
+  FileText
 } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 
 export function Navbar() {
-  const { currentUser, setCurrentUser, users, companies, activeCompanyId, setActiveCompany } = useStore();
+  const { currentUser, setCurrentUser, users, company } = useStore();
   const pathname = usePathname();
-
-  const activeCompany = companies.find(c => c.id === activeCompanyId);
-  const userCompanies = companies.filter(c => currentUser?.company_ids.includes(c.id));
 
   const isActive = (path: string) => pathname === path;
 
@@ -45,67 +43,37 @@ export function Navbar() {
               <span className="text-xl font-bold text-primary tracking-tight">ReimburseFlow</span>
             </Link>
 
-            {/* Company Switcher */}
-            {currentUser && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="gap-2 border-primary/20 hover:bg-primary/5">
-                    <Building2 className="w-4 h-4 text-primary" />
-                    <span className="max-w-[120px] truncate font-bold">{activeCompany?.name}</span>
-                    <ChevronDown className="w-3 h-3 opacity-50" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-56">
-                  <DropdownMenuLabel className="text-[10px] uppercase text-muted-foreground">Switch Organization</DropdownMenuLabel>
-                  {userCompanies.map(c => (
-                    <DropdownMenuItem 
-                      key={c.id} 
-                      onClick={() => setActiveCompany(c.id)}
-                      className={c.id === activeCompanyId ? "bg-primary/5 font-bold" : ""}
-                    >
-                      <Building2 className="w-4 h-4 mr-2 opacity-50" />
-                      {c.name}
-                      <span className="ml-auto text-[10px] bg-muted px-1.5 rounded">{c.base_currency}</span>
-                    </DropdownMenuItem>
-                  ))}
-                  {currentUser.role === 'ADMIN' && (
-                    <>
-                      <DropdownMenuSeparator />
-                      <Link href="/admin/companies">
-                        <DropdownMenuItem>
-                          <Settings className="w-4 h-4 mr-2" />
-                          Manage Companies
-                        </DropdownMenuItem>
-                      </Link>
-                    </>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
+            <div className="hidden md:flex items-center gap-2 bg-muted/30 px-3 py-1.5 rounded-full border border-primary/5">
+              <Building2 className="w-3.5 h-3.5 text-primary" />
+              <span className="text-xs font-bold text-muted-foreground">{company.name}</span>
+            </div>
             
             <div className="hidden md:flex items-center space-x-1">
               <NavLink href="/dashboard" active={isActive('/dashboard')}>
                 <LayoutDashboard className="w-4 h-4" /> Dashboard
               </NavLink>
               
-              {/* Only Employees can create claims */}
               {currentUser?.role === 'EMPLOYEE' && (
                 <NavLink href="/expenses/new" active={isActive('/expenses/new')}>
                   <PlusCircle className="w-4 h-4" /> New Claim
                 </NavLink>
               )}
 
-              {/* Managers and Admins handle approvals/oversight */}
-              {(currentUser?.role === 'ADMIN' || currentUser?.role === 'MANAGER') && (
+              {['ADMIN', 'MANAGER', 'FINANCE', 'DIRECTOR'].includes(currentUser?.role || '') && (
                 <NavLink href="/approvals" active={isActive('/approvals')}>
                   <CheckCircle className="w-4 h-4" /> Approvals
                 </NavLink>
               )}
               
               {currentUser?.role === 'ADMIN' && (
-                <NavLink href="/admin/users" active={isActive('/admin/users')}>
-                  <Users className="w-4 h-4" /> Users
-                </NavLink>
+                <>
+                  <NavLink href="/admin/users" active={isActive('/admin/users')}>
+                    <Users className="w-4 h-4" /> Users
+                  </NavLink>
+                  <NavLink href="/admin/workflow" active={isActive('/admin/workflow')}>
+                    <Settings className="w-4 h-4" /> Workflow
+                  </NavLink>
+                </>
               )}
             </div>
           </div>
@@ -126,7 +94,7 @@ export function Navbar() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-64">
-                <DropdownMenuLabel>Demo User Profiles</DropdownMenuLabel>
+                <DropdownMenuLabel>Switch User Profile</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 {users.map((user) => (
                   <DropdownMenuItem key={user.id} onClick={() => setCurrentUser(user)} className="cursor-pointer py-2">
@@ -137,7 +105,7 @@ export function Navbar() {
                       </Avatar>
                       <div className="flex flex-col">
                         <span className={user.id === currentUser?.id ? "font-bold text-primary" : "text-sm"}>{user.name}</span>
-                        <span className="text-[10px] text-muted-foreground">{user.role} ({user.company_ids.length} Orgs)</span>
+                        <span className="text-[10px] text-muted-foreground">{user.role}</span>
                       </div>
                     </div>
                   </DropdownMenuItem>
