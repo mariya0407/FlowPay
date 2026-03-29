@@ -1,6 +1,6 @@
 "use client"
 
-import { useStore, Expense } from '@/app/lib/store';
+import { useStore, Expense, User, ExpenseApproval } from '@/app/lib/store';
 import { Navbar } from '@/components/layout/Navbar';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,8 +14,7 @@ import {
   Check,
   X,
   History,
-  MessageSquare,
-  Globe
+  MessageSquare
 } from 'lucide-react';
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
@@ -24,36 +23,41 @@ import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 export default function ApprovalsPage() {
-  const { currentUser, expenses, workflow, updateExpenseStatus, users } = useStore();
+  const { currentUser, expenses, users, expenseApprovals, updateApprovalStatus, receipts, company } = useStore();
   const { toast } = useToast();
   
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
   const [comment, setComment] = useState('');
   const [isActionOpen, setIsActionOpen] = useState(false);
-  const [actionType, setActionType] = useState<'APPROVE' | 'REJECT'>('APPROVE');
+  const [actionType, setActionType] = useState<'APPROVED' | 'REJECTED'>('APPROVED');
 
-  // Filter expenses based on current step and role
-  const pendingApprovals = expenses.filter(exp => {
-    if (exp.status !== 'PENDING') return false;
-    const currentStep = workflow[exp.currentStepIndex];
-    if (!currentStep) return false;
+  // Find approvals assigned to the current user that are still pending
+  const myPendingApprovals = expenseApprovals.filter(ea => {
+    if (ea.status !== 'PENDING') return false;
     
-    // Admin can see everything
-    if (currentUser?.role === 'ADMIN') return true;
+    // Check if it's currently this user's turn (Sequential logic)
+    const allApprovalsForThisExpense = expenseApprovals
+      .filter(a => a.expense_id === ea.expense_id)
+      .sort((a, b) => a.step_order - b.step_order);
     
-    // Managers see their direct reports ONLY if they are in the correct step role
-    if (currentUser?.role === 'MANAGER' && currentStep.approverRole === 'MANAGER') {
-      const isManagerOfReporter = users.find(u => u.id === exp.employeeId)?.managerId === currentUser.id;
-      return isManagerOfReporter;
-    }
-    
-    return false;
+    const currentStepIndex = allApprovalsForThisExpense.findIndex(a => a.status === 'PENDING');
+    const isCurrentTurn = allApprovalsForThisExpense[currentStepIndex]?.approver_id === currentUser?.id;
+
+    // Special case: Admin can approve anything at any time if they are in the chain
+    const isAdmin = currentUser?.role === 'ADMIN';
+    const isAssigned = ea.approver_id === currentUser?.id;
+
+    return (isAssigned && isCurrentTurn) || (isAdmin && isAssigned);
   });
+
+  const pendingExpenses = expenses.filter(e => 
+    myPendingApprovals.some(ea => ea.expense_id === e.id)
+  );
 
   const handleAction = () => {
     if (!selectedExpense || !currentUser) return;
     
-    if (actionType === 'REJECT' && !comment.trim()) {
+    if (actionType === 'REJECTED' && !comment.trim()) {
       toast({
         variant: "destructive",
         title: "Comment Required",
@@ -62,16 +66,11 @@ export default function ApprovalsPage() {
       return;
     }
 
-    updateExpenseStatus(
-      selectedExpense.id, 
-      currentUser.id, 
-      actionType === 'APPROVE' ? 'APPROVED' : 'REJECTED', 
-      comment
-    );
+    updateApprovalStatus(selectedExpense.id, currentUser.id, actionType, comment);
 
     toast({
-      title: actionType === 'APPROVE' ? "Claim Approved" : "Claim Rejected",
-      description: `The request from ${selectedExpense.employeeName} has been processed.`,
+      title: actionType === 'APPROVED' ? "Claim Approved" : "Claim Rejected",
+      description: `The request has been processed.`,
     });
 
     setIsActionOpen(false);
@@ -93,7 +92,7 @@ export default function ApprovalsPage() {
       <Navbar />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <header className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Approval Queue</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground font-headline">Approval Queue</h1>
           <p className="text-muted-foreground mt-1">Review and manage expense claims for your team.</p>
         </header>
 
@@ -101,94 +100,84 @@ export default function ApprovalsPage() {
           <CardHeader>
             <CardTitle>Pending Reviews</CardTitle>
             <CardDescription>
-              {pendingApprovals.length} items awaiting your decision.
+              {pendingExpenses.length} items awaiting your decision.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {pendingApprovals.length > 0 ? (
+            {pendingExpenses.length > 0 ? (
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Employee</TableHead>
                     <TableHead>Description</TableHead>
                     <TableHead>Original Amount</TableHead>
-                    <TableHead>Converted ({selectedExpense?.baseCurrency || 'USD'})</TableHead>
-                    <TableHead>Workflow Step</TableHead>
+                    <TableHead>Converted ({company.base_currency})</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {pendingApprovals.map((exp) => (
-                    <TableRow key={exp.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <Avatar className="h-8 w-8">
-                            <AvatarImage src={`https://picsum.photos/seed/${exp.employeeId}/30/30`} />
-                            <AvatarFallback>{exp.employeeName.charAt(0)}</AvatarFallback>
-                          </Avatar>
+                  {pendingExpenses.map((exp) => {
+                    const employee = users.find(u => u.id === exp.user_id);
+                    return (
+                      <TableRow key={exp.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <Avatar className="h-8 w-8">
+                              <AvatarImage src={`https://picsum.photos/seed/${exp.user_id}/30/30`} />
+                              <AvatarFallback>{employee?.name?.charAt(0)}</AvatarFallback>
+                            </Avatar>
+                            <div className="flex flex-col">
+                              <span className="font-medium">{employee?.name}</span>
+                              <span className="text-xs text-muted-foreground">{new Date(exp.expense_date).toLocaleDateString()}</span>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
                           <div className="flex flex-col">
-                            <span className="font-medium">{exp.employeeName}</span>
-                            <span className="text-xs text-muted-foreground">{new Date(exp.date).toLocaleDateString()}</span>
+                            <span className="font-semibold line-clamp-1">{exp.description}</span>
+                            <span className="text-xs text-muted-foreground">{exp.category}</span>
                           </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <span className="font-semibold line-clamp-1">{exp.description}</span>
-                          <span className="text-xs text-muted-foreground">{exp.category}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        {exp.currency} {exp.amount.toLocaleString()}
-                      </TableCell>
-                      <TableCell className="font-bold text-primary">
-                        {exp.baseCurrency} {exp.convertedAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col gap-1 w-32">
-                          <div className="text-[10px] text-muted-foreground uppercase font-bold">Level {exp.currentStepIndex + 1}</div>
-                          <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                            <div 
-                              className="h-full bg-primary transition-all duration-500" 
-                              style={{ width: `${((exp.currentStepIndex + 1) / workflow.length) * 100}%` }}
-                            ></div>
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {exp.currency} {exp.amount.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="font-bold text-primary">
+                          {company.base_currency} {exp.converted_amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-600 hover:text-white"
+                              onClick={() => {
+                                setSelectedExpense(exp);
+                                setActionType('APPROVED');
+                                setIsActionOpen(true);
+                              }}
+                            >
+                              <Check className="w-4 h-4 mr-1" /> Approve
+                            </Button>
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-600 hover:text-white"
+                              onClick={() => {
+                                setSelectedExpense(exp);
+                                setActionType('REJECTED');
+                                setIsActionOpen(true);
+                              }}
+                            >
+                              <X className="w-4 h-4 mr-1" /> Reject
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={() => setSelectedExpense(exp)}>
+                              <Eye className="w-4 h-4" />
+                            </Button>
                           </div>
-                          <span className="text-xs font-medium text-primary">{workflow[exp.currentStepIndex]?.name}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            className="bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-600 hover:text-white"
-                            onClick={() => {
-                              setSelectedExpense(exp);
-                              setActionType('APPROVE');
-                              setIsActionOpen(true);
-                            }}
-                          >
-                            <Check className="w-4 h-4 mr-1" /> Approve
-                          </Button>
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            className="bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-600 hover:text-white"
-                            onClick={() => {
-                              setSelectedExpense(exp);
-                              setActionType('REJECT');
-                              setIsActionOpen(true);
-                            }}
-                          >
-                            <X className="w-4 h-4 mr-1" /> Reject
-                          </Button>
-                          <Button variant="ghost" size="icon" onClick={() => setSelectedExpense(exp)}>
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             ) : (
@@ -214,52 +203,54 @@ export default function ApprovalsPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="space-y-6">
                   <div className="grid grid-cols-2 gap-4">
-                    <DetailItem label="Submission Date" value={new Date(selectedExpense.date).toLocaleDateString()} />
+                    <DetailItem label="Submission Date" value={new Date(selectedExpense.created_at).toLocaleDateString()} />
                     <DetailItem label="Status" value={getStatusBadge(selectedExpense.status)} />
-                    <DetailItem label="Merchant/Vendor" value={selectedExpense.description} />
+                    <DetailItem label="Description" value={selectedExpense.description} />
                     <DetailItem label="Category" value={selectedExpense.category} />
                     <DetailItem label="Original Amount" value={`${selectedExpense.currency} ${selectedExpense.amount}`} />
-                    <DetailItem label="Exchange Rate" value={`1 ${selectedExpense.currency} = ${selectedExpense.exchangeRate} ${selectedExpense.baseCurrency}`} />
                   </div>
                   
                   <div className="p-4 bg-white rounded-lg border shadow-sm">
                     <div className="text-sm text-muted-foreground mb-1">Total Converted Value</div>
                     <div className="text-3xl font-black text-primary">
-                      {selectedExpense.baseCurrency} {selectedExpense.convertedAmount.toFixed(2)}
+                      {company.base_currency} {selectedExpense.converted_amount.toFixed(2)}
                     </div>
                   </div>
 
                   <div className="space-y-4">
                     <h4 className="text-sm font-bold flex items-center gap-2">
-                      <History className="w-4 h-4" /> Audit History
+                      <History className="w-4 h-4" /> Approval Flow & History
                     </h4>
                     <div className="space-y-3">
-                      {selectedExpense.history.map((h, i) => (
-                        <div key={i} className="flex gap-3 text-sm animate-in">
-                          <div className="w-1 bg-primary/20 rounded-full" />
-                          <div className="flex-1">
-                            <div className="flex justify-between items-center">
-                              <span className="font-bold">{h.userName}</span>
-                              <span className="text-[10px] text-muted-foreground">{new Date(h.date).toLocaleString()}</span>
-                            </div>
-                            <div className="text-xs text-muted-foreground">{h.action}</div>
-                            {h.comment && (
-                              <div className="mt-1 p-2 bg-muted rounded italic text-xs">
-                                "{h.comment}"
+                      {expenseApprovals.filter(ea => ea.expense_id === selectedExpense.id).sort((a,b) => a.step_order - b.step_order).map((h, i) => {
+                        const approver = users.find(u => u.id === h.approver_id);
+                        return (
+                          <div key={i} className="flex gap-3 text-sm animate-in">
+                            <div className={`w-1 rounded-full ${h.status === 'APPROVED' ? 'bg-emerald-500' : h.status === 'REJECTED' ? 'bg-rose-500' : 'bg-amber-500'}`} />
+                            <div className="flex-1">
+                              <div className="flex justify-between items-center">
+                                <span className="font-bold">{approver?.name} (Step {h.step_order})</span>
+                                {h.acted_at && <span className="text-[10px] text-muted-foreground">{new Date(h.acted_at).toLocaleString()}</span>}
                               </div>
-                            )}
+                              <div className="text-xs text-muted-foreground">{h.status}</div>
+                              {h.comments && (
+                                <div className="mt-1 p-2 bg-muted rounded italic text-xs">
+                                  "{h.comments}"
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
 
                 <div className="space-y-4">
                   <h4 className="text-sm font-bold">Receipt Attachment</h4>
-                  {selectedExpense.receiptDataUri ? (
+                  {receipts.find(r => r.expense_id === selectedExpense.id) ? (
                     <div className="border rounded-xl overflow-hidden bg-white">
-                      <img src={selectedExpense.receiptDataUri} alt="Receipt" className="w-full h-auto object-contain max-h-[500px]" />
+                      <img src={receipts.find(r => r.expense_id === selectedExpense.id)?.file_url} alt="Receipt" className="w-full h-auto object-contain max-h-[500px]" />
                     </div>
                   ) : (
                     <div className="aspect-video bg-muted flex items-center justify-center rounded-xl border-2 border-dashed">
@@ -277,22 +268,22 @@ export default function ApprovalsPage() {
       <Dialog open={isActionOpen} onOpenChange={setIsActionOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              {actionType === 'APPROVE' ? <CheckCircle className="text-emerald-500" /> : <X className="text-rose-500" />}
-              {actionType === 'APPROVE' ? 'Approve' : 'Reject'} Claim
+            <DialogTitle className="flex items-center gap-2 font-headline text-2xl">
+              {actionType === 'APPROVED' ? <CheckCircle className="text-emerald-500" /> : <X className="text-rose-500" />}
+              {actionType === 'APPROVED' ? 'Approve' : 'Reject'} Claim
             </DialogTitle>
             <DialogDescription>
-              Reviewing <strong>{selectedExpense?.employeeName}</strong> for <strong>{selectedExpense?.currency} {selectedExpense?.amount}</strong>.
+              Reviewing for <strong>{selectedExpense?.currency} {selectedExpense?.amount}</strong>.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label className="flex justify-between">
                 <span>Decision Comments</span>
-                {actionType === 'REJECT' && <span className="text-[10px] text-rose-500 font-bold uppercase">Required for Rejection</span>}
+                {actionType === 'REJECTED' && <span className="text-[10px] text-rose-500 font-bold uppercase">Required for Rejection</span>}
               </Label>
               <Textarea 
-                placeholder={actionType === 'APPROVE' ? "Optional approval notes..." : "Reason for rejection (required)..."} 
+                placeholder={actionType === 'APPROVED' ? "Optional approval notes..." : "Reason for rejection (required)..."} 
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
                 className="min-h-[100px]"
@@ -302,11 +293,11 @@ export default function ApprovalsPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsActionOpen(false)}>Cancel</Button>
             <Button 
-              variant={actionType === 'APPROVE' ? 'default' : 'destructive'} 
+              variant={actionType === 'APPROVED' ? 'default' : 'destructive'} 
               onClick={handleAction}
-              disabled={actionType === 'REJECT' && !comment.trim()}
+              disabled={actionType === 'REJECTED' && !comment.trim()}
             >
-              {actionType === 'APPROVE' ? 'Confirm Approval' : 'Confirm Rejection'}
+              {actionType === 'APPROVED' ? 'Confirm Approval' : 'Confirm Rejection'}
             </Button>
           </DialogFooter>
         </DialogContent>

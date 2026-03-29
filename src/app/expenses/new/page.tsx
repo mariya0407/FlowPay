@@ -23,7 +23,7 @@ interface Currency {
 export default function NewExpense() {
   const router = useRouter();
   const { toast } = useToast();
-  const { currentUser, addExpense, baseCurrency } = useStore();
+  const { currentUser, addExpense, company, approvalRules } = useStore();
   
   const [loading, setLoading] = useState(false);
   const [extracting, setExtracting] = useState(false);
@@ -75,20 +75,20 @@ export default function NewExpense() {
   // Fetch Exchange Rate when currency or base currency changes
   useEffect(() => {
     async function fetchRate() {
-      if (formData.currency === baseCurrency) {
+      if (formData.currency === company.base_currency) {
         setExchangeRate(1);
         return;
       }
       try {
         const res = await fetch(`https://api.exchangerate-api.com/v4/latest/${formData.currency}`);
         const data = await res.json();
-        setExchangeRate(data.rates[baseCurrency] || 1);
+        setExchangeRate(data.rates[company.base_currency] || 1);
       } catch (err) {
         console.error("Failed to fetch exchange rate", err);
       }
     }
     fetchRate();
-  }, [formData.currency, baseCurrency]);
+  }, [formData.currency, company.base_currency]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -159,23 +159,20 @@ export default function NewExpense() {
       }
 
       addExpense({
-        employeeId: currentUser.id,
-        employeeName: currentUser.name,
+        user_id: currentUser.id,
+        company_id: company.id,
+        rule_id: approvalRules[0].id,
         amount: numericAmount,
         currency: formData.currency,
-        convertedAmount: converted,
-        baseCurrency: baseCurrency,
-        exchangeRate: exchangeRate,
+        converted_amount: converted,
         category: formData.category,
         description: formData.description,
-        date: formData.date,
-        status: 'PENDING',
-        receiptDataUri: formData.receiptDataUri
-      });
+        expense_date: formData.date,
+      }, formData.receiptDataUri);
 
       toast({
         title: "Expense Submitted",
-        description: `Your claim for ${formData.currency} ${numericAmount} (${baseCurrency} ${converted.toFixed(2)}) has been sent.`,
+        description: `Your claim for ${formData.currency} ${numericAmount} has been sent for approval.`,
       });
       router.push('/dashboard');
     } catch (err) {
@@ -197,7 +194,7 @@ export default function NewExpense() {
           <CardHeader className="border-b bg-muted/30">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-2xl">Submit Expense</CardTitle>
+                <CardTitle className="text-2xl font-headline">Submit Expense</CardTitle>
                 <CardDescription>Upload a receipt or fill in the details manually.</CardDescription>
               </div>
               <Sparkles className="w-8 h-8 text-primary opacity-20" />
@@ -264,14 +261,14 @@ export default function NewExpense() {
                     </div>
                   </div>
 
-                  {formData.currency !== baseCurrency && formData.amount && (
+                  {formData.currency !== company.base_currency && formData.amount && (
                     <div className="p-3 bg-primary/5 rounded-md border border-primary/10 flex items-center justify-between">
                       <div className="flex items-center gap-2 text-sm text-primary font-medium">
                         <Globe className="w-4 h-4" />
                         Estimated Conversion
                       </div>
                       <div className="text-sm font-bold">
-                        {baseCurrency} {(parseFloat(formData.amount) * exchangeRate).toFixed(2)}
+                        {company.base_currency} {(parseFloat(formData.amount) * exchangeRate).toFixed(2)}
                       </div>
                     </div>
                   )}

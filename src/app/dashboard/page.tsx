@@ -22,7 +22,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 
 export default function Dashboard() {
-  const { currentUser, expenses, users, baseCurrency } = useStore();
+  const { currentUser, expenses, users, company } = useStore();
 
   if (!currentUser) return null;
 
@@ -35,72 +35,68 @@ export default function Dashboard() {
     }
   };
 
-  // Helper to filter and calculate
   const getStats = (list: Expense[]) => {
-    const total = list.reduce((sum, exp) => sum + exp.convertedAmount, 0);
+    const total = list.reduce((sum, exp) => sum + exp.converted_amount, 0);
     const pending = list.filter(e => e.status === 'PENDING').length;
     const approved = list.filter(e => e.status === 'APPROVED').length;
     const rejected = list.filter(e => e.status === 'REJECTED').length;
     return { total, pending, approved, rejected };
   };
 
-  // Render Logic based on Role
   const renderEmployeeDashboard = () => {
-    const myExpenses = expenses.filter(e => e.employeeId === currentUser.id);
+    const myExpenses = expenses.filter(e => e.user_id === currentUser.id);
     const stats = getStats(myExpenses);
 
     return (
-      <div className="space-y-8">
+      <div className="space-y-8 animate-in">
         <header className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">My Expenses</h1>
+          <h1 className="text-4xl font-black tracking-tight text-foreground font-headline">My Expenses</h1>
           <p className="text-muted-foreground mt-1">Track your claims and submission history.</p>
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <StatCard title="Total Submitted" value={`${baseCurrency} ${stats.total.toLocaleString()}`} icon={<Wallet className="h-4 w-4 text-primary" />} subtitle={`${myExpenses.length} claims`} />
+          <StatCard title="Total Submitted" value={`${company.base_currency} ${stats.total.toLocaleString()}`} icon={<Wallet className="h-4 w-4 text-primary" />} subtitle={`${myExpenses.length} claims`} />
           <StatCard title="Awaiting Approval" value={stats.pending} icon={<Clock className="h-4 w-4 text-amber-500" />} subtitle="Pending items" />
           <StatCard title="Approved Claims" value={stats.approved} icon={<CheckCircle2 className="h-4 w-4 text-emerald-500" />} subtitle="Ready for payment" />
           <StatCard title="Rejected" value={stats.rejected} icon={<AlertCircle className="h-4 w-4 text-destructive" />} subtitle="Requires attention" />
         </div>
 
-        <ExpenseTable title="Recent Submissions" expenses={myExpenses.slice(0, 5)} showBadge={getStatusBadge} emptyMessage="No expenses submitted yet." />
+        <ExpenseTable title="Recent Submissions" expenses={myExpenses.slice(0, 5)} showBadge={getStatusBadge} emptyMessage="No expenses submitted yet." users={users} baseCurrency={company.base_currency} />
       </div>
     );
   };
 
   const renderManagerDashboard = () => {
-    const teamUserIds = users.filter(u => u.managerId === currentUser.id).map(u => u.id);
-    const teamExpenses = expenses.filter(e => teamUserIds.includes(e.employeeId));
-    const myExpenses = expenses.filter(e => e.employeeId === currentUser.id);
+    const teamUserIds = users.filter(u => u.manager_id === currentUser.id).map(u => u.id);
+    const teamExpenses = expenses.filter(e => teamUserIds.includes(e.user_id));
+    const myExpenses = expenses.filter(e => e.user_id === currentUser.id);
     const teamStats = getStats(teamExpenses);
 
     return (
-      <div className="space-y-8">
+      <div className="space-y-8 animate-in">
         <header className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Team Overview</h1>
+          <h1 className="text-4xl font-black tracking-tight text-foreground font-headline">Team Overview</h1>
           <p className="text-muted-foreground mt-1">Monitor your direct reports' spending and approvals.</p>
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <StatCard title="Team Total Spend" value={`${baseCurrency} ${teamStats.total.toLocaleString()}`} icon={<Users className="h-4 w-4 text-primary" />} subtitle={`${teamExpenses.length} total team claims`} />
+          <StatCard title="Team Total Spend" value={`${company.base_currency} ${teamStats.total.toLocaleString()}`} icon={<Users className="h-4 w-4 text-primary" />} subtitle={`${teamExpenses.length} total team claims`} />
           <StatCard title="Team Pending" value={teamStats.pending} icon={<Clock className="h-4 w-4 text-amber-500" />} subtitle="Review required" />
-          <StatCard title="My Personal Spend" value={`${baseCurrency} ${getStats(myExpenses).total.toLocaleString()}`} icon={<Wallet className="h-4 w-4 text-muted-foreground" />} subtitle="Your own claims" />
-          <Link href="/approvals" className="block">
-            <Card className="hover:border-primary transition-colors bg-primary/5 cursor-pointer h-full">
-              <CardContent className="pt-6">
-                <div className="flex flex-col items-center text-center space-y-2">
-                  <CheckCircle2 className="h-8 w-8 text-primary" />
-                  <div className="font-bold text-lg">Process Approvals</div>
-                  <p className="text-xs text-muted-foreground">Go to approval queue</p>
-                </div>
+          <StatCard title="My Personal Spend" value={`${company.base_currency} ${getStats(myExpenses).total.toLocaleString()}`} icon={<Wallet className="h-4 w-4 text-muted-foreground" />} subtitle="Your own claims" />
+          <Link href="/approvals" className="block h-full">
+            <Card className="hover:border-primary transition-all bg-primary/5 cursor-pointer h-full border-primary/20">
+              <CardContent className="pt-6 flex flex-col items-center justify-center h-full space-y-2">
+                <CheckCircle2 className="h-8 w-8 text-primary" />
+                <div className="font-bold text-lg">Approvals</div>
+                <p className="text-xs text-muted-foreground">Go to queue</p>
               </CardContent>
             </Card>
           </Link>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <ExpenseTable title="Team Activity" expenses={teamExpenses.slice(0, 5)} showBadge={getStatusBadge} emptyMessage="No team activity yet." />
-          <ExpenseTable title="My Claims" expenses={myExpenses.slice(0, 5)} showBadge={getStatusBadge} emptyMessage="No personal claims yet." />
+          <ExpenseTable title="Team Activity" expenses={teamExpenses.slice(0, 5)} showBadge={getStatusBadge} emptyMessage="No team activity yet." users={users} baseCurrency={company.base_currency} />
+          <ExpenseTable title="My Claims" expenses={myExpenses.slice(0, 5)} showBadge={getStatusBadge} emptyMessage="No personal claims yet." users={users} baseCurrency={company.base_currency} />
         </div>
       </div>
     );
@@ -110,10 +106,10 @@ export default function Dashboard() {
     const stats = getStats(expenses);
 
     return (
-      <div className="space-y-8">
+      <div className="space-y-8 animate-in">
         <header className="mb-8 flex justify-between items-end">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight text-foreground">Global Control Center</h1>
+            <h1 className="text-4xl font-black tracking-tight text-foreground font-headline">Global Control Center</h1>
             <p className="text-muted-foreground mt-1">Company-wide oversight and system configuration.</p>
           </div>
           <div className="flex gap-2">
@@ -123,13 +119,13 @@ export default function Dashboard() {
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <StatCard title="Company Total" value={`${baseCurrency} ${stats.total.toLocaleString()}`} icon={<ShieldCheck className="h-4 w-4 text-primary" />} subtitle="Across all departments" />
+          <StatCard title="Company Total" value={`${company.base_currency} ${stats.total.toLocaleString()}`} icon={<ShieldCheck className="h-4 w-4 text-primary" />} subtitle="Across all departments" />
           <StatCard title="Active Users" value={users.length} icon={<Users className="h-4 w-4 text-accent" />} subtitle="Employees onboarded" />
           <StatCard title="Pending Review" value={stats.pending} icon={<Clock className="h-4 w-4 text-amber-500" />} subtitle="Awaiting action" />
           <StatCard title="Total Claims" value={expenses.length} icon={<Receipt className="h-4 w-4 text-primary" />} subtitle="Historical volume" />
         </div>
 
-        <ExpenseTable title="Recent Global Expenses" expenses={expenses.slice(0, 10)} showBadge={getStatusBadge} emptyMessage="No company expenses yet." />
+        <ExpenseTable title="Recent Global Expenses" expenses={expenses.slice(0, 10)} showBadge={getStatusBadge} emptyMessage="No company expenses yet." users={users} baseCurrency={company.base_currency} />
       </div>
     );
   };
@@ -148,26 +144,26 @@ export default function Dashboard() {
 
 function StatCard({ title, value, icon, subtitle }: { title: string, value: string | number, icon: React.ReactNode, subtitle: string }) {
   return (
-    <Card className="hover:shadow-md transition-shadow">
+    <Card className="hover:shadow-lg transition-all border-primary/5">
       <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
+        <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{title}</CardTitle>
         {icon}
       </CardHeader>
       <CardContent>
-        <div className="text-2xl font-bold">{value}</div>
-        <p className="text-xs text-muted-foreground">{subtitle}</p>
+        <div className="text-2xl font-black text-foreground">{value}</div>
+        <p className="text-[10px] text-muted-foreground mt-1 font-medium">{subtitle}</p>
       </CardContent>
     </Card>
   );
 }
 
-function ExpenseTable({ title, expenses, showBadge, emptyMessage }: { title: string, expenses: Expense[], showBadge: (s: string) => React.ReactNode, emptyMessage: string }) {
+function ExpenseTable({ title, expenses, showBadge, emptyMessage, users, baseCurrency }: { title: string, expenses: Expense[], showBadge: (s: string) => React.ReactNode, emptyMessage: string, users: any[], baseCurrency: string }) {
   return (
-    <Card>
+    <Card className="border-primary/5 shadow-sm">
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-lg">{title}</CardTitle>
+        <CardTitle className="text-lg font-bold">{title}</CardTitle>
         <Link href="/expenses/new">
-          <Button variant="ghost" size="sm" className="gap-2 text-primary">
+          <Button variant="ghost" size="sm" className="gap-2 text-primary hover:bg-primary/5">
             <PlusCircle className="w-4 h-4" /> New Claim
           </Button>
         </Link>
@@ -185,19 +181,22 @@ function ExpenseTable({ title, expenses, showBadge, emptyMessage }: { title: str
               </TableRow>
             </TableHeader>
             <TableBody>
-              {expenses.map((exp) => (
-                <TableRow key={exp.id}>
-                  <TableCell className="text-xs">{new Date(exp.date).toLocaleDateString()}</TableCell>
-                  <TableCell className="font-medium">{exp.employeeName}</TableCell>
-                  <TableCell className="max-w-[150px] truncate">{exp.description}</TableCell>
-                  <TableCell className="font-bold">{exp.baseCurrency} {exp.convertedAmount.toFixed(2)}</TableCell>
-                  <TableCell>{showBadge(exp.status)}</TableCell>
-                </TableRow>
-              ))}
+              {expenses.map((exp) => {
+                const user = users.find(u => u.id === exp.user_id);
+                return (
+                  <TableRow key={exp.id}>
+                    <TableCell className="text-xs">{new Date(exp.expense_date).toLocaleDateString()}</TableCell>
+                    <TableCell className="font-medium text-xs">{user?.name}</TableCell>
+                    <TableCell className="max-w-[150px] truncate text-xs">{exp.description}</TableCell>
+                    <TableCell className="font-bold text-xs">{baseCurrency} {exp.converted_amount.toFixed(2)}</TableCell>
+                    <TableCell>{showBadge(exp.status)}</TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         ) : (
-          <div className="text-center py-12 border-2 border-dashed rounded-lg">
+          <div className="text-center py-12 border-2 border-dashed rounded-lg border-muted/30">
             <Receipt className="w-8 h-8 text-muted mx-auto mb-2 opacity-20" />
             <p className="text-sm text-muted-foreground">{emptyMessage}</p>
           </div>

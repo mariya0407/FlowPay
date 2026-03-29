@@ -14,7 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 export default function UserManagement() {
-  const { users, addUser, updateUser } = useStore();
+  const { users, addUser, updateUser, company } = useStore();
   const { toast } = useToast();
   const [search, setSearch] = useState('');
 
@@ -29,25 +29,25 @@ export default function UserManagement() {
   };
 
   const handleManagerChange = (id: string, managerId: string) => {
-    updateUser(id, { managerId: managerId === 'none' ? undefined : managerId });
+    updateUser(id, { manager_id: managerId === 'none' ? undefined : managerId });
     toast({ title: "Hierarchy Updated", description: "Manager assigned successfully" });
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background font-body">
       <Navbar />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <header className="mb-8 flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight text-foreground">User Management</h1>
-            <p className="text-muted-foreground mt-1">Manage employee hierarchy and access roles.</p>
+            <h1 className="text-4xl font-black tracking-tight text-foreground font-headline">User Management</h1>
+            <p className="text-muted-foreground mt-1">Manage employee hierarchy and access roles for {company.name}.</p>
           </div>
           <Button className="gap-2">
             <UserPlus className="w-4 h-4" /> Add User
           </Button>
         </header>
 
-        <Card className="mb-8">
+        <Card className="mb-8 border-primary/10">
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle>Organization Members</CardTitle>
@@ -82,8 +82,8 @@ export default function UserManagement() {
                           <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
                         </Avatar>
                         <div className="flex flex-col">
-                          <span className="font-medium">{user.name}</span>
-                          <span className="text-xs text-muted-foreground">{user.email}</span>
+                          <span className="font-bold text-sm">{user.name}</span>
+                          <span className="text-[10px] text-muted-foreground">{user.email}</span>
                         </div>
                       </div>
                     </TableCell>
@@ -104,7 +104,7 @@ export default function UserManagement() {
                     </TableCell>
                     <TableCell>
                       <Select 
-                        value={user.managerId || 'none'} 
+                        value={user.manager_id || 'none'} 
                         onValueChange={(val) => handleManagerChange(user.id, val)}
                       >
                         <SelectTrigger className="w-48 h-8 text-xs">
