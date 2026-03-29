@@ -22,7 +22,6 @@ import {
   Crown,
   Network,
   List,
-  LayoutGrid,
   Maximize2,
   X
 } from 'lucide-react';
@@ -108,6 +107,22 @@ export default function UserManagement() {
     }
   };
 
+  // HIERARCHY LOGIC: Director > Finance > Manager > Employee
+  const getAvailableManagersForRole = (role: UserRole) => {
+    switch (role) {
+      case 'EMPLOYEE':
+        return users.filter(u => u.role === 'MANAGER');
+      case 'MANAGER':
+        return users.filter(u => u.role === 'FINANCE' || u.role === 'DIRECTOR');
+      case 'FINANCE':
+        return users.filter(u => u.role === 'DIRECTOR' || u.role === 'ADMIN');
+      case 'DIRECTOR':
+        return users.filter(u => u.role === 'ADMIN');
+      default:
+        return users.filter(u => u.role === 'ADMIN');
+    }
+  };
+
   const renderMemberRow = (user: User, level: number = 0) => {
     const reports = filteredUsers.filter(u => u.manager_id === user.id);
     const hasReports = reports.length > 0;
@@ -180,8 +195,8 @@ export default function UserManagement() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">No Manager</SelectItem>
-                  {users
-                    .filter(u => u.id !== user.id && ['MANAGER', 'DIRECTOR', 'ADMIN', 'FINANCE'].includes(u.role))
+                  {getAvailableManagersForRole(user.role)
+                    .filter(u => u.id !== user.id)
                     .map(m => (
                       <SelectItem key={m.id} value={m.id}>{m.name} ({m.role})</SelectItem>
                     ))}
@@ -349,8 +364,8 @@ export default function UserManagement() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="none">None</SelectItem>
-                          {users.filter(u => ['MANAGER', 'DIRECTOR', 'ADMIN'].includes(u.role)).map(u => (
-                            <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                          {getAvailableManagersForRole(newUser.role).map(u => (
+                            <SelectItem key={u.id} value={u.id}>{u.name} ({u.role})</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
