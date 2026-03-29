@@ -4,18 +4,17 @@ import bcrypt from 'bcryptjs';
 
 export async function POST(req: Request) {
   try {
+    // Parse the request body — frontend sends { companyName, baseCurrency, user: { name, email, password } }
     const body = await req.json();
-    console.log('--- SIGNUP REQUEST RECEIVED ---');
-    console.log('Payload:', JSON.stringify(body, null, 2));
+    const { companyName, baseCurrency } = body;
+    const { name, email, password } = body.user || {};
 
-    const { companyName, userName, email, password, baseCurrency } = body;
-
-    if (!companyName || !userName || !email || !password) {
-      console.warn('Signup failed: Missing required fields');
+    // Validate required fields
+    if (!companyName || !email || !password) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    // Check if user exists globally
+    // Check if a user with the given email already exists
     const existingUser = await prisma.user.findFirst({
       where: { email },
     });
@@ -24,11 +23,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'User with this email already exists' }, { status: 400 });
     }
 
+    // Hash the password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Using transaction to create both Company and User atomically
-    const result = await prisma.$transaction(async (tx) => {
-      // Create Company First
+    // Use a transaction to create both the Company and the User atomically
+    const result = await prisma.$transaction(async (tx: any) => {
+      // Create the Company first
       const company = await tx.company.create({
         data: {
           name: companyName,
@@ -36,29 +36,26 @@ export async function POST(req: Request) {
         },
       });
 
-      // Then create Admin User and link to Company
+      // Create the Admin User and link it to the Company
       const adminUser = await tx.user.create({
         data: {
-          companyId: company.id,
-          name: userName,
+          name: name || email, // Fall back to email if no name provided
           email,
           passwordHash: hashedPassword,
-          role: 'Admin',
+          companyId: company.id,
         },
       });
 
-      // Remove sensitive data before returning
-      const { passwordHash, ...userWithoutPassword } = adminUser;
-
-      return { company, user: userWithoutPassword };
+      return { company, adminUser };
     });
 
-    return NextResponse.json(
-      { message: 'Company and Admin created successfully', data: result },
-      { status: 201 }
-    );
+    // Return the created company and user as the response
+    return NextResponse.json(result, { status: 201 });
   } catch (error) {
-    console.error('Registration Error:', error);
+    // Log the error for debugging
+    console.error('Error in /auth/register:', error);
+
+    // Return a generic error response
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }

@@ -1,35 +1,27 @@
 /**
  * Generic Fetch Wrapper to auto-inject the Authorization Bearer token 
  * natively from localStorage to all outgoing requests.
+ * 
+ * Uses a relative '/api' base so requests go through the Next.js rewrite proxy
+ * (configured in next.config.ts) and avoid CORS issues.
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
+const API_BASE = '/api';
 
-export async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('flowpay_token') : null;
-  
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-    ...options.headers,
-  };
+export async function fetchWithAuth(endpoint: string, options: RequestInit) {
+  const response = await fetch(`${API_BASE}${endpoint}`, options);
 
-  if (token) {
-    (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
+  let data;
+  try {
+    data = await response.json();
+  } catch (error) {
+    console.error('Failed to parse JSON response:', error);
+    data = null;
   }
-
-  const response = await fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers,
-  });
-
-  console.log(`[API ${options.method || 'GET'}] ${endpoint} -> Status ${response.status}`);
-
-  const isJson = response.headers.get('content-type')?.includes('application/json');
-  const data = isJson ? await response.json() : null;
 
   if (!response.ok) {
     console.error(`[API ERROR] ${endpoint} Status: ${response.status}`, data);
-    throw new Error(data?.error || 'API Request Failed');
+    throw new Error(data?.error || `API Request Failed with status ${response.status}`);
   }
 
   return data;

@@ -24,21 +24,22 @@ export function useAuth() {
     }
   };
 
-  const registerOrganization = async (payload: any) => {
-    setLoading(true);
+  async function registerOrganization(payload: any) {
+    console.log('Registering organization with payload:', payload);
+  
     try {
-      const data = await fetchWithAuth('/auth/register', {
+      return await fetchWithAuth('/auth/register', {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify(payload),
       });
-      return data;
-    } catch (err: any) {
-      setError(err.message);
-      throw err;
-    } finally {
-      setLoading(false);
+    } catch (error) {
+      console.error('Failed to register organization:', error);
+      throw error;
     }
-  };
+  }
 
   return {
     user,
