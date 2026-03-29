@@ -1,4 +1,4 @@
-import { prisma } from '@/backend/lib/prisma';
+import { prisma } from '@/lib/prisma';
 import { AuditAction } from '@prisma/client';
 
 type AuditLogPayload = {

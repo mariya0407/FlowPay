@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/backend/lib/prisma';
-import { verifyRequest } from '@/backend/lib/auth';
-import { logAudit } from '@/backend/lib/audit';
+import { prisma } from '@/lib/prisma';
+import { verifyRequest } from '@/lib/auth';
+import { logAudit } from '@/lib/audit';
 
 export async function POST(
   req: Request,

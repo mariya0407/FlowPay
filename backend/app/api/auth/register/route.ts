@@ -1,12 +1,17 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/backend/lib/prisma';
+import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 
 export async function POST(req: Request) {
   try {
-    const { companyName, userName, email, password, baseCurrency } = await req.json();
+    const body = await req.json();
+    console.log('--- SIGNUP REQUEST RECEIVED ---');
+    console.log('Payload:', JSON.stringify(body, null, 2));
+
+    const { companyName, userName, email, password, baseCurrency } = body;
 
     if (!companyName || !userName || !email || !password) {
+      console.warn('Signup failed: Missing required fields');
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 

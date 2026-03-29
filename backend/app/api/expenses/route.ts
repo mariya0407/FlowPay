@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/backend/lib/prisma';
-import { verifyRequest } from '@/backend/lib/auth';
-import { processExpenseApprovalChain } from '@/backend/lib/approvalEngine';
+import { prisma } from '@/lib/prisma';
+import { verifyRequest } from '@/lib/auth';
+import { processExpenseApprovalChain } from '@/lib/approvalEngine';
 
 export async function POST(req: Request) {
   try {
