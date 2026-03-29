@@ -21,7 +21,6 @@ import {
   ChevronDown,
   Users,
   Building2,
-  Globe
 } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 
@@ -88,14 +87,21 @@ export function Navbar() {
               <NavLink href="/dashboard" active={isActive('/dashboard')}>
                 <LayoutDashboard className="w-4 h-4" /> Dashboard
               </NavLink>
-              <NavLink href="/expenses/new" active={isActive('/expenses/new')}>
-                <PlusCircle className="w-4 h-4" /> New Claim
-              </NavLink>
+              
+              {/* Only Employees can create claims */}
+              {currentUser?.role === 'EMPLOYEE' && (
+                <NavLink href="/expenses/new" active={isActive('/expenses/new')}>
+                  <PlusCircle className="w-4 h-4" /> New Claim
+                </NavLink>
+              )}
+
+              {/* Managers and Admins handle approvals/oversight */}
               {(currentUser?.role === 'ADMIN' || currentUser?.role === 'MANAGER') && (
                 <NavLink href="/approvals" active={isActive('/approvals')}>
                   <CheckCircle className="w-4 h-4" /> Approvals
                 </NavLink>
               )}
+              
               {currentUser?.role === 'ADMIN' && (
                 <NavLink href="/admin/users" active={isActive('/admin/users')}>
                   <Users className="w-4 h-4" /> Users
@@ -137,7 +143,7 @@ export function Navbar() {
                   </DropdownMenuItem>
                 ))}
                 <DropdownMenuSeparator />
-                <DropdownMenuItem className="text-destructive py-3">
+                <DropdownMenuItem className="text-destructive py-3" onClick={() => setCurrentUser(null)}>
                   <LogOut className="w-4 h-4 mr-2" />
                   Sign Out
                 </DropdownMenuItem>

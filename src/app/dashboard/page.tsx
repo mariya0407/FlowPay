@@ -1,7 +1,7 @@
 "use client"
 
-import { useStore, Expense, UserRole } from '@/app/lib/store';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { useStore, Expense } from '@/app/lib/store';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Navbar } from '@/components/layout/Navbar';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -10,17 +10,17 @@ import {
   Clock, 
   CheckCircle2, 
   AlertCircle, 
-  TrendingUp,
   Receipt,
   PlusCircle,
   Users,
   Settings,
-  ArrowRight,
   ShieldCheck,
-  Building2
+  Building2,
+  Briefcase
 } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 export default function Dashboard() {
   const { currentUser, expenses, users, companies, activeCompanyId } = useStore();
@@ -68,7 +68,15 @@ export default function Dashboard() {
           <StatCard title="Rejected" value={stats.rejected} icon={<AlertCircle className="h-4 w-4 text-destructive" />} subtitle="Requires attention" />
         </div>
 
-        <ExpenseTable title="Recent Organization Submissions" expenses={myExpenses.slice(0, 5)} showBadge={getStatusBadge} emptyMessage="No expenses submitted for this company." users={users} baseCurrency={currentCompany?.base_currency || 'USD'} />
+        <ExpenseTable 
+          title="Recent Organization Submissions" 
+          expenses={myExpenses.slice(0, 5)} 
+          showBadge={getStatusBadge} 
+          emptyMessage="No expenses submitted for this company." 
+          users={users} 
+          baseCurrency={currentCompany?.base_currency || 'USD'}
+          showCreateButton={true}
+        />
       </div>
     );
   };
@@ -76,7 +84,6 @@ export default function Dashboard() {
   const renderManagerDashboard = () => {
     const teamUserIds = users.filter(u => u.manager_id === currentUser.id).map(u => u.id);
     const teamExpenses = companyExpenses.filter(e => teamUserIds.includes(e.user_id));
-    const myExpenses = companyExpenses.filter(e => e.user_id === currentUser.id);
     const teamStats = getStats(teamExpenses);
 
     return (
@@ -86,27 +93,34 @@ export default function Dashboard() {
             <h1 className="text-4xl font-black tracking-tight text-foreground font-headline">Command Center</h1>
             <p className="text-muted-foreground mt-1">Managing team activity for <span className="font-bold text-primary">{currentCompany?.name}</span>.</p>
           </div>
-          <Building2 className="w-12 h-12 text-primary opacity-10" />
+          <Briefcase className="w-12 h-12 text-primary opacity-10" />
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <StatCard title="Team Total Spend" value={`${currentCompany?.base_currency} ${teamStats.total.toLocaleString()}`} icon={<Users className="h-4 w-4 text-primary" />} subtitle={`${teamExpenses.length} total team claims`} />
           <StatCard title="Team Pending" value={teamStats.pending} icon={<Clock className="h-4 w-4 text-amber-500" />} subtitle="Review required" />
-          <StatCard title="My Personal Spend" value={`${currentCompany?.base_currency} ${getStats(myExpenses).total.toLocaleString()}`} icon={<Wallet className="h-4 w-4 text-muted-foreground" />} subtitle="Your claims in this org" />
+          <StatCard title="Team Members" value={teamUserIds.length} icon={<Users className="h-4 w-4 text-muted-foreground" />} subtitle="Direct reports in this org" />
           <Link href="/approvals" className="block h-full">
             <Card className="hover:border-primary transition-all bg-primary/5 cursor-pointer h-full border-primary/20 group">
               <CardContent className="pt-6 flex flex-col items-center justify-center h-full space-y-2">
                 <CheckCircle2 className="h-8 w-8 text-primary group-hover:scale-110 transition-transform" />
-                <div className="font-bold text-lg">Approvals</div>
-                <p className="text-[10px] text-muted-foreground font-bold uppercase">Enter Review Queue</p>
+                <div className="font-bold text-lg">Enter Review Queue</div>
+                <p className="text-[10px] text-muted-foreground font-bold uppercase">Approvals Dashboard</p>
               </CardContent>
             </Card>
           </Link>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <ExpenseTable title="Team Activity" expenses={teamExpenses.slice(0, 5)} showBadge={getStatusBadge} emptyMessage="No team activity for this organization." users={users} baseCurrency={currentCompany?.base_currency || 'USD'} />
-          <ExpenseTable title="My Personal Ledger" expenses={myExpenses.slice(0, 5)} showBadge={getStatusBadge} emptyMessage="No personal claims for this organization." users={users} baseCurrency={currentCompany?.base_currency || 'USD'} />
+        <div className="grid grid-cols-1 gap-8">
+          <ExpenseTable 
+            title="Team Activity" 
+            expenses={teamExpenses.slice(0, 10)} 
+            showBadge={getStatusBadge} 
+            emptyMessage="No team activity for this organization." 
+            users={users} 
+            baseCurrency={currentCompany?.base_currency || 'USD'}
+            showCreateButton={false}
+          />
         </div>
       </div>
     );
@@ -136,7 +150,15 @@ export default function Dashboard() {
           <StatCard title="Total Claims" value={companyExpenses.length} icon={<Receipt className="h-4 w-4 text-primary" />} subtitle="Historical volume" />
         </div>
 
-        <ExpenseTable title="Active Submissions" expenses={companyExpenses.slice(0, 10)} showBadge={getStatusBadge} emptyMessage="No activity found for this company." users={users} baseCurrency={currentCompany?.base_currency || 'USD'} />
+        <ExpenseTable 
+          title="Active Submissions" 
+          expenses={companyExpenses.slice(0, 10)} 
+          showBadge={getStatusBadge} 
+          emptyMessage="No activity found for this company." 
+          users={users} 
+          baseCurrency={currentCompany?.base_currency || 'USD'}
+          showCreateButton={false}
+        />
       </div>
     );
   };
@@ -168,16 +190,18 @@ function StatCard({ title, value, icon, subtitle }: { title: string, value: stri
   );
 }
 
-function ExpenseTable({ title, expenses, showBadge, emptyMessage, users, baseCurrency }: { title: string, expenses: Expense[], showBadge: (s: string) => React.ReactNode, emptyMessage: string, users: any[], baseCurrency: string }) {
+function ExpenseTable({ title, expenses, showBadge, emptyMessage, users, baseCurrency, showCreateButton }: { title: string, expenses: Expense[], showBadge: (s: string) => React.ReactNode, emptyMessage: string, users: any[], baseCurrency: string, showCreateButton: boolean }) {
   return (
     <Card className="border-primary/5 shadow-sm">
       <CardHeader className="flex flex-row items-center justify-between bg-muted/5 border-b">
         <CardTitle className="text-lg font-bold">{title}</CardTitle>
-        <Link href="/expenses/new">
-          <Button variant="ghost" size="sm" className="gap-2 text-primary hover:bg-primary/5 font-bold">
-            <PlusCircle className="w-4 h-4" /> Create Claim
-          </Button>
-        </Link>
+        {showCreateButton && (
+          <Link href="/expenses/new">
+            <Button variant="ghost" size="sm" className="gap-2 text-primary hover:bg-primary/5 font-bold">
+              <PlusCircle className="w-4 h-4" /> Create Claim
+            </Button>
+          </Link>
+        )}
       </CardHeader>
       <CardContent className="p-0">
         {expenses.length > 0 ? (

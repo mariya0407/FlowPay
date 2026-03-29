@@ -26,8 +26,19 @@ export default function NewExpense() {
   const { currentUser, addExpense, companies, activeCompanyId, approvalRules } = useStore();
   
   const company = companies.find(c => c.id === activeCompanyId);
-  const baseCurrency = company?.base_currency || 'USD';
   
+  // Security check: Only Employees can create claims
+  useEffect(() => {
+    if (currentUser && currentUser.role !== 'EMPLOYEE') {
+      toast({
+        variant: "destructive",
+        title: "Access Restricted",
+        description: "Only Employees are authorized to create new expense claims.",
+      });
+      router.push('/dashboard');
+    }
+  }, [currentUser, router, toast]);
+
   const [loading, setLoading] = useState(false);
   const [extracting, setExtracting] = useState(false);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
@@ -48,7 +59,6 @@ export default function NewExpense() {
     patterns: string[];
   } | null>(null);
 
-  // Fetch Currencies
   useEffect(() => {
     async function fetchCurrencies() {
       try {
@@ -75,24 +85,23 @@ export default function NewExpense() {
     fetchCurrencies();
   }, []);
 
-  // Fetch Exchange Rate when currency or base currency changes
   useEffect(() => {
     async function fetchRate() {
-      if (!baseCurrency) return;
-      if (formData.currency === baseCurrency) {
+      if (!company?.base_currency) return;
+      if (formData.currency === company.base_currency) {
         setExchangeRate(1);
         return;
       }
       try {
         const res = await fetch(`https://api.exchangerate-api.com/v4/latest/${formData.currency}`);
         const data = await res.json();
-        setExchangeRate(data.rates[baseCurrency] || 1);
+        setExchangeRate(data.rates[company.base_currency] || 1);
       } catch (err) {
         console.error("Failed to fetch exchange rate", err);
       }
     }
     fetchRate();
-  }, [formData.currency, baseCurrency]);
+  }, [formData.currency, company?.base_currency]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -190,6 +199,8 @@ export default function NewExpense() {
     }
   };
 
+  if (!currentUser || currentUser.role !== 'EMPLOYEE') return null;
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
@@ -265,14 +276,14 @@ export default function NewExpense() {
                     </div>
                   </div>
 
-                  {formData.currency !== baseCurrency && formData.amount && (
+                  {company?.base_currency && formData.currency !== company.base_currency && formData.amount && (
                     <div className="p-3 bg-primary/5 rounded-md border border-primary/10 flex items-center justify-between">
                       <div className="flex items-center gap-2 text-sm text-primary font-medium">
                         <Globe className="w-4 h-4" />
                         Estimated Conversion
                       </div>
                       <div className="text-sm font-bold">
-                        {baseCurrency} {(parseFloat(formData.amount) * exchangeRate).toFixed(2)}
+                        {company.base_currency} {(parseFloat(formData.amount) * exchangeRate).toFixed(2)}
                       </div>
                     </div>
                   )}
