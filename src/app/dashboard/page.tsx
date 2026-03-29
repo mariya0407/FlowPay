@@ -1,7 +1,7 @@
 "use client"
 
-import { useStore } from '@/app/lib/store';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useStore, Expense, UserRole } from '@/app/lib/store';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Navbar } from '@/components/layout/Navbar';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -10,22 +10,21 @@ import {
   Clock, 
   CheckCircle2, 
   AlertCircle, 
-  ArrowRight,
   TrendingUp,
   Receipt,
-  PlusCircle
+  PlusCircle,
+  Users,
+  Settings,
+  ArrowRight,
+  ShieldCheck
 } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 
 export default function Dashboard() {
-  const { currentUser, expenses } = useStore();
-  
-  const userExpenses = currentUser?.role === 'ADMIN' ? expenses : expenses.filter(e => e.employeeId === currentUser?.id);
-  const totalAmount = userExpenses.reduce((sum, exp) => sum + exp.amount, 0);
-  const pendingCount = userExpenses.filter(e => e.status === 'PENDING').length;
-  const approvedCount = userExpenses.filter(e => e.status === 'APPROVED').length;
-  const rejectedCount = userExpenses.filter(e => e.status === 'REJECTED').length;
+  const { currentUser, expenses, users, baseCurrency } = useStore();
+
+  if (!currentUser) return null;
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -36,142 +35,174 @@ export default function Dashboard() {
     }
   };
 
+  // Helper to filter and calculate
+  const getStats = (list: Expense[]) => {
+    const total = list.reduce((sum, exp) => sum + exp.convertedAmount, 0);
+    const pending = list.filter(e => e.status === 'PENDING').length;
+    const approved = list.filter(e => e.status === 'APPROVED').length;
+    const rejected = list.filter(e => e.status === 'REJECTED').length;
+    return { total, pending, approved, rejected };
+  };
+
+  // Render Logic based on Role
+  const renderEmployeeDashboard = () => {
+    const myExpenses = expenses.filter(e => e.employeeId === currentUser.id);
+    const stats = getStats(myExpenses);
+
+    return (
+      <div className="space-y-8">
+        <header className="mb-8">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">My Expenses</h1>
+          <p className="text-muted-foreground mt-1">Track your claims and submission history.</p>
+        </header>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <StatCard title="Total Submitted" value={`${baseCurrency} ${stats.total.toLocaleString()}`} icon={<Wallet className="h-4 w-4 text-primary" />} subtitle={`${myExpenses.length} claims`} />
+          <StatCard title="Awaiting Approval" value={stats.pending} icon={<Clock className="h-4 w-4 text-amber-500" />} subtitle="Pending items" />
+          <StatCard title="Approved Claims" value={stats.approved} icon={<CheckCircle2 className="h-4 w-4 text-emerald-500" />} subtitle="Ready for payment" />
+          <StatCard title="Rejected" value={stats.rejected} icon={<AlertCircle className="h-4 w-4 text-destructive" />} subtitle="Requires attention" />
+        </div>
+
+        <ExpenseTable title="Recent Submissions" expenses={myExpenses.slice(0, 5)} showBadge={getStatusBadge} emptyMessage="No expenses submitted yet." />
+      </div>
+    );
+  };
+
+  const renderManagerDashboard = () => {
+    const teamUserIds = users.filter(u => u.managerId === currentUser.id).map(u => u.id);
+    const teamExpenses = expenses.filter(e => teamUserIds.includes(e.employeeId));
+    const myExpenses = expenses.filter(e => e.employeeId === currentUser.id);
+    const teamStats = getStats(teamExpenses);
+
+    return (
+      <div className="space-y-8">
+        <header className="mb-8">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Team Overview</h1>
+          <p className="text-muted-foreground mt-1">Monitor your direct reports' spending and approvals.</p>
+        </header>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <StatCard title="Team Total Spend" value={`${baseCurrency} ${teamStats.total.toLocaleString()}`} icon={<Users className="h-4 w-4 text-primary" />} subtitle={`${teamExpenses.length} total team claims`} />
+          <StatCard title="Team Pending" value={teamStats.pending} icon={<Clock className="h-4 w-4 text-amber-500" />} subtitle="Review required" />
+          <StatCard title="My Personal Spend" value={`${baseCurrency} ${getStats(myExpenses).total.toLocaleString()}`} icon={<Wallet className="h-4 w-4 text-muted-foreground" />} subtitle="Your own claims" />
+          <Link href="/approvals" className="block">
+            <Card className="hover:border-primary transition-colors bg-primary/5 cursor-pointer h-full">
+              <CardContent className="pt-6">
+                <div className="flex flex-col items-center text-center space-y-2">
+                  <CheckCircle2 className="h-8 w-8 text-primary" />
+                  <div className="font-bold text-lg">Process Approvals</div>
+                  <p className="text-xs text-muted-foreground">Go to approval queue</p>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <ExpenseTable title="Team Activity" expenses={teamExpenses.slice(0, 5)} showBadge={getStatusBadge} emptyMessage="No team activity yet." />
+          <ExpenseTable title="My Claims" expenses={myExpenses.slice(0, 5)} showBadge={getStatusBadge} emptyMessage="No personal claims yet." />
+        </div>
+      </div>
+    );
+  };
+
+  const renderAdminDashboard = () => {
+    const stats = getStats(expenses);
+
+    return (
+      <div className="space-y-8">
+        <header className="mb-8 flex justify-between items-end">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-foreground">Global Control Center</h1>
+            <p className="text-muted-foreground mt-1">Company-wide oversight and system configuration.</p>
+          </div>
+          <div className="flex gap-2">
+            <Link href="/admin/users"><Button variant="outline" size="sm" className="gap-2"><Users className="w-4 h-4" /> Users</Button></Link>
+            <Link href="/admin/workflow"><Button variant="outline" size="sm" className="gap-2"><Settings className="w-4 h-4" /> Workflow</Button></Link>
+          </div>
+        </header>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <StatCard title="Company Total" value={`${baseCurrency} ${stats.total.toLocaleString()}`} icon={<ShieldCheck className="h-4 w-4 text-primary" />} subtitle="Across all departments" />
+          <StatCard title="Active Users" value={users.length} icon={<Users className="h-4 w-4 text-accent" />} subtitle="Employees onboarded" />
+          <StatCard title="Pending Review" value={stats.pending} icon={<Clock className="h-4 w-4 text-amber-500" />} subtitle="Awaiting action" />
+          <StatCard title="Total Claims" value={expenses.length} icon={<Receipt className="h-4 w-4 text-primary" />} subtitle="Historical volume" />
+        </div>
+
+        <ExpenseTable title="Recent Global Expenses" expenses={expenses.slice(0, 10)} showBadge={getStatusBadge} emptyMessage="No company expenses yet." />
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <header className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Welcome back, {currentUser?.name}</h1>
-          <p className="text-muted-foreground mt-1">Here's what's happening with your expenses.</p>
-        </header>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card className="hover:shadow-md transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Total Claims</CardTitle>
-              <Wallet className="h-4 w-4 text-primary" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">${totalAmount.toLocaleString()}</div>
-              <p className="text-xs text-muted-foreground">From {userExpenses.length} claims</p>
-            </CardContent>
-          </Card>
-          <Card className="hover:shadow-md transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Pending</CardTitle>
-              <Clock className="h-4 w-4 text-accent" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{pendingCount}</div>
-              <p className="text-xs text-muted-foreground">Awaiting approval</p>
-            </CardContent>
-          </Card>
-          <Card className="hover:shadow-md transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Approved</CardTitle>
-              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{approvedCount}</div>
-              <p className="text-xs text-muted-foreground">Ready for payment</p>
-            </CardContent>
-          </Card>
-          <Card className="hover:shadow-md transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Rejected</CardTitle>
-              <AlertCircle className="h-4 w-4 text-destructive" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{rejectedCount}</div>
-              <p className="text-xs text-muted-foreground">Requires attention</p>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <Card className="lg:col-span-2">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle>Recent Expenses</CardTitle>
-                <p className="text-sm text-muted-foreground">A history of your submitted claims</p>
-              </div>
-              <Link href="/expenses/new">
-                <Button size="sm" className="gap-2">
-                  <PlusCircle className="w-4 h-4" /> New Claim
-                </Button>
-              </Link>
-            </CardHeader>
-            <CardContent>
-              {userExpenses.length > 0 ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Vendor/Description</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead>Amount</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {userExpenses.slice(0, 5).map((exp) => (
-                      <TableRow key={exp.id} className="cursor-pointer hover:bg-muted/50 transition-colors">
-                        <TableCell className="font-medium">{new Date(exp.date).toLocaleDateString()}</TableCell>
-                        <TableCell>
-                          <div className="flex flex-col">
-                            <span className="font-semibold">{exp.description}</span>
-                            <span className="text-xs text-muted-foreground">ID: {exp.id}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>{exp.category}</TableCell>
-                        <TableCell className="font-bold">${exp.amount.toLocaleString()}</TableCell>
-                        <TableCell>{getStatusBadge(exp.status)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              ) : (
-                <div className="text-center py-12">
-                  <Receipt className="w-12 h-12 text-muted mx-auto mb-4" />
-                  <p className="text-muted-foreground">No expenses submitted yet.</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <div className="space-y-8">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Spend Analysis</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">Monthly Trend</span>
-                    <Badge variant="secondary" className="gap-1 text-emerald-600">
-                      <TrendingUp className="w-3 h-3" /> +12%
-                    </Badge>
-                  </div>
-                  <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-                    <div className="h-full bg-primary" style={{ width: '65%' }}></div>
-                  </div>
-                  <p className="text-xs text-muted-foreground">You have used 65% of your estimated monthly budget.</p>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-primary text-primary-foreground">
-              <CardHeader>
-                <CardTitle className="text-lg">Need Help?</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm opacity-90 mb-4">Our support team is here to assist you with any expense-related queries or system issues.</p>
-                <Button variant="secondary" size="sm" className="w-full">Contact Support</Button>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
+        {currentUser.role === 'ADMIN' && renderAdminDashboard()}
+        {currentUser.role === 'MANAGER' && renderManagerDashboard()}
+        {currentUser.role === 'EMPLOYEE' && renderEmployeeDashboard()}
       </main>
     </div>
+  );
+}
+
+function StatCard({ title, value, icon, subtitle }: { title: string, value: string | number, icon: React.ReactNode, subtitle: string }) {
+  return (
+    <Card className="hover:shadow-md transition-shadow">
+      <CardHeader className="flex flex-row items-center justify-between pb-2">
+        <CardTitle className="text-sm font-medium">{title}</CardTitle>
+        {icon}
+      </CardHeader>
+      <CardContent>
+        <div className="text-2xl font-bold">{value}</div>
+        <p className="text-xs text-muted-foreground">{subtitle}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ExpenseTable({ title, expenses, showBadge, emptyMessage }: { title: string, expenses: Expense[], showBadge: (s: string) => React.ReactNode, emptyMessage: string }) {
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle className="text-lg">{title}</CardTitle>
+        <Link href="/expenses/new">
+          <Button variant="ghost" size="sm" className="gap-2 text-primary">
+            <PlusCircle className="w-4 h-4" /> New Claim
+          </Button>
+        </Link>
+      </CardHeader>
+      <CardContent>
+        {expenses.length > 0 ? (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead>User</TableHead>
+                <TableHead>Vendor</TableHead>
+                <TableHead>Amount</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {expenses.map((exp) => (
+                <TableRow key={exp.id}>
+                  <TableCell className="text-xs">{new Date(exp.date).toLocaleDateString()}</TableCell>
+                  <TableCell className="font-medium">{exp.employeeName}</TableCell>
+                  <TableCell className="max-w-[150px] truncate">{exp.description}</TableCell>
+                  <TableCell className="font-bold">{exp.baseCurrency} {exp.convertedAmount.toFixed(2)}</TableCell>
+                  <TableCell>{showBadge(exp.status)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ) : (
+          <div className="text-center py-12 border-2 border-dashed rounded-lg">
+            <Receipt className="w-8 h-8 text-muted mx-auto mb-2 opacity-20" />
+            <p className="text-sm text-muted-foreground">{emptyMessage}</p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

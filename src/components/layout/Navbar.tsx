@@ -48,7 +48,7 @@ export function Navbar() {
               <NavLink href="/expenses/new" active={isActive('/expenses/new')}>
                 <PlusCircle className="w-4 h-4" /> New Claim
               </NavLink>
-              {(currentUser?.role === 'ADMIN' || currentUser?.role === 'MANAGER' || currentUser?.role === 'FINANCE') && (
+              {(currentUser?.role === 'ADMIN' || currentUser?.role === 'MANAGER') && (
                 <NavLink href="/approvals" active={isActive('/approvals')}>
                   <CheckCircle className="w-4 h-4" /> Approvals
                 </NavLink>

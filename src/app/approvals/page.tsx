@@ -23,7 +23,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 export default function ApprovalsPage() {
-  const { currentUser, expenses, workflow, updateExpenseStatus } = useStore();
+  const { currentUser, expenses, workflow, updateExpenseStatus, users } = useStore();
   const { toast } = useToast();
   
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
@@ -37,13 +37,15 @@ export default function ApprovalsPage() {
     const currentStep = workflow[exp.currentStepIndex];
     if (!currentStep) return false;
     
-    // Admin can see everything, Manager sees their direct reports, Finance sees their step
+    // Admin can see everything
     if (currentUser?.role === 'ADMIN') return true;
-    if (currentUser?.role === 'FINANCE' && currentStep.approverRole === 'FINANCE') return true;
+    
+    // Managers see their direct reports ONLY if they are in the correct step role
     if (currentUser?.role === 'MANAGER' && currentStep.approverRole === 'MANAGER') {
-      // In a real app, check managerId hierarchy. Here we check if the user is a manager role.
-      return true; 
+      const isManagerOfReporter = users.find(u => u.id === exp.employeeId)?.managerId === currentUser.id;
+      return isManagerOfReporter;
     }
+    
     return false;
   });
 
@@ -198,7 +200,6 @@ export default function ApprovalsPage() {
           </CardContent>
         </Card>
 
-        {/* Expense Detail Sidebar/View (Simulated here) */}
         {selectedExpense && !isActionOpen && (
           <Card className="mt-8 border-primary/20 bg-primary/[0.02]">
             <CardHeader className="flex flex-row items-center justify-between">

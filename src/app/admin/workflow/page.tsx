@@ -100,7 +100,6 @@ export default function WorkflowConfig() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="MANAGER">Manager</SelectItem>
-                            <SelectItem value="FINANCE">Finance</SelectItem>
                             <SelectItem value="ADMIN">Admin</SelectItem>
                           </SelectContent>
                         </Select>

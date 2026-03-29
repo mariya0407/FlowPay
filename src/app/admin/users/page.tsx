@@ -98,7 +98,6 @@ export default function UserManagement() {
                         <SelectContent>
                           <SelectItem value="EMPLOYEE">Employee</SelectItem>
                           <SelectItem value="MANAGER">Manager</SelectItem>
-                          <SelectItem value="FINANCE">Finance</SelectItem>
                           <SelectItem value="ADMIN">Admin</SelectItem>
                         </SelectContent>
                       </Select>

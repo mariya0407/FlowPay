@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type UserRole = 'ADMIN' | 'MANAGER' | 'EMPLOYEE' | 'FINANCE';
+export type UserRole = 'ADMIN' | 'MANAGER' | 'EMPLOYEE';
 
 export interface User {
   id: string;
@@ -46,7 +46,7 @@ export interface ApprovalStep {
   name: string;
   approverRole: UserRole;
   isRequired: boolean;
-  minApprovalPercentage: number; // For future multi-approver expansion
+  minApprovalPercentage: number;
 }
 
 interface ReimburseFlowStore {
@@ -68,17 +68,16 @@ interface ReimburseFlowStore {
 const initialUsers: User[] = [
   { id: '1', name: 'Alice Admin', email: 'alice@company.com', role: 'ADMIN' },
   { id: '2', name: 'Bob Manager', email: 'bob@company.com', role: 'MANAGER' },
-  { id: '3', name: 'Charlie Finance', email: 'charlie@company.com', role: 'FINANCE' },
   { id: '4', name: 'David Employee', email: 'david@company.com', role: 'EMPLOYEE', managerId: '2' },
 ];
 
 const initialWorkflow: ApprovalStep[] = [
   { id: 's1', name: 'Manager Review', approverRole: 'MANAGER', isRequired: true, minApprovalPercentage: 100 },
-  { id: 's2', name: 'Finance Audit', approverRole: 'FINANCE', isRequired: true, minApprovalPercentage: 100 },
+  { id: 's2', name: 'Final Audit', approverRole: 'ADMIN', isRequired: true, minApprovalPercentage: 100 },
 ];
 
 export const useStore = create<ReimburseFlowStore>((set) => ({
-  currentUser: initialUsers[3],
+  currentUser: initialUsers[2],
   users: initialUsers,
   expenses: [],
   workflow: initialWorkflow,
@@ -117,10 +116,6 @@ export const useStore = create<ReimburseFlowStore>((set) => ({
     if (!expense || !user) return state;
 
     const isRejecting = action === 'REJECTED';
-    
-    // Logic for moving to next step
-    // In this simplified version, one approval from the correct role moves it forward
-    // unless we implement the multi-approver percentage rule fully.
     const isLastStep = expense.currentStepIndex >= state.workflow.length - 1;
     const nextStepIndex = !isRejecting ? expense.currentStepIndex + 1 : expense.currentStepIndex;
     const finalStatus = isRejecting ? 'REJECTED' : (isLastStep ? 'APPROVED' : 'PENDING');
