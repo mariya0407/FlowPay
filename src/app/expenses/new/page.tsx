@@ -23,7 +23,10 @@ interface Currency {
 export default function NewExpense() {
   const router = useRouter();
   const { toast } = useToast();
-  const { currentUser, addExpense, company, approvalRules } = useStore();
+  const { currentUser, addExpense, companies, activeCompanyId, approvalRules } = useStore();
+  
+  const company = companies.find(c => c.id === activeCompanyId);
+  const baseCurrency = company?.base_currency || 'USD';
   
   const [loading, setLoading] = useState(false);
   const [extracting, setExtracting] = useState(false);
@@ -75,20 +78,21 @@ export default function NewExpense() {
   // Fetch Exchange Rate when currency or base currency changes
   useEffect(() => {
     async function fetchRate() {
-      if (formData.currency === company.base_currency) {
+      if (!baseCurrency) return;
+      if (formData.currency === baseCurrency) {
         setExchangeRate(1);
         return;
       }
       try {
         const res = await fetch(`https://api.exchangerate-api.com/v4/latest/${formData.currency}`);
         const data = await res.json();
-        setExchangeRate(data.rates[company.base_currency] || 1);
+        setExchangeRate(data.rates[baseCurrency] || 1);
       } catch (err) {
         console.error("Failed to fetch exchange rate", err);
       }
     }
     fetchRate();
-  }, [formData.currency, company.base_currency]);
+  }, [formData.currency, baseCurrency]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -128,7 +132,7 @@ export default function NewExpense() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentUser) return;
+    if (!currentUser || !company) return;
     
     setLoading(true);
     const numericAmount = parseFloat(formData.amount);
@@ -261,14 +265,14 @@ export default function NewExpense() {
                     </div>
                   </div>
 
-                  {formData.currency !== company.base_currency && formData.amount && (
+                  {formData.currency !== baseCurrency && formData.amount && (
                     <div className="p-3 bg-primary/5 rounded-md border border-primary/10 flex items-center justify-between">
                       <div className="flex items-center gap-2 text-sm text-primary font-medium">
                         <Globe className="w-4 h-4" />
                         Estimated Conversion
                       </div>
                       <div className="text-sm font-bold">
-                        {company.base_currency} {(parseFloat(formData.amount) * exchangeRate).toFixed(2)}
+                        {baseCurrency} {(parseFloat(formData.amount) * exchangeRate).toFixed(2)}
                       </div>
                     </div>
                   )}

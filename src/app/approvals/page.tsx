@@ -23,8 +23,10 @@ import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 export default function ApprovalsPage() {
-  const { currentUser, expenses, users, expenseApprovals, updateApprovalStatus, receipts, company } = useStore();
+  const { currentUser, expenses, users, expenseApprovals, updateApprovalStatus, receipts, companies, activeCompanyId } = useStore();
   const { toast } = useToast();
+  
+  const company = companies.find(c => c.id === activeCompanyId);
   
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
   const [comment, setComment] = useState('');
@@ -111,7 +113,7 @@ export default function ApprovalsPage() {
                     <TableHead>Employee</TableHead>
                     <TableHead>Description</TableHead>
                     <TableHead>Original Amount</TableHead>
-                    <TableHead>Converted ({company.base_currency})</TableHead>
+                    <TableHead>Converted ({company?.base_currency || 'USD'})</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -142,7 +144,7 @@ export default function ApprovalsPage() {
                           {exp.currency} {exp.amount.toLocaleString()}
                         </TableCell>
                         <TableCell className="font-bold text-primary">
-                          {company.base_currency} {exp.converted_amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          {company?.base_currency || 'USD'} {exp.converted_amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
@@ -213,7 +215,7 @@ export default function ApprovalsPage() {
                   <div className="p-4 bg-white rounded-lg border shadow-sm">
                     <div className="text-sm text-muted-foreground mb-1">Total Converted Value</div>
                     <div className="text-3xl font-black text-primary">
-                      {company.base_currency} {selectedExpense.converted_amount.toFixed(2)}
+                      {company?.base_currency || 'USD'} {selectedExpense.converted_amount.toFixed(2)}
                     </div>
                   </div>
 
