@@ -16,7 +16,9 @@ import {
   ShieldCheck,
   Zap,
   ArrowRight,
-  AlertCircle
+  AlertCircle,
+  MessageSquare,
+  Clock
 } from 'lucide-react';
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
@@ -35,11 +37,17 @@ export default function ApprovalsPage() {
   const [actionType, setActionType] = useState<ExpenseStatus>('APPROVED');
 
   // Logic: Identify approvals currently waiting for this user
+  // Hierarchy: DIRECTOR > FINANCE > MANAGER > EMPLOYEES
   const myPendingApprovals = expenseApprovals.filter(ea => {
     if (ea.status !== 'PENDING') return false;
+    
+    // Admins see everything (Monitor & Override)
+    if (currentUser?.role === 'ADMIN') return true;
+    
+    // Regular approvers only see what is assigned to them
     if (ea.approver_id !== currentUser?.id) return false;
 
-    // Check Sequence: It's my turn if all previous steps (lower step_order) are APPROVED
+    // Sequential Check: It's my turn if all previous steps (lower step_order) are APPROVED
     const siblings = expenseApprovals
       .filter(a => a.expense_id === ea.expense_id)
       .sort((a, b) => a.step_order - b.step_order);
@@ -47,22 +55,20 @@ export default function ApprovalsPage() {
     const myIndex = siblings.findIndex(a => a.id === ea.id);
     const previousStepsDone = siblings.slice(0, myIndex).every(s => s.status === 'APPROVED');
 
-    // Admin Override: Admins can see everything in the chain
-    const isAdmin = currentUser?.role === 'ADMIN';
-
-    return previousStepsDone || isAdmin;
+    return previousStepsDone;
   });
 
   const pendingExpenses = expenses.filter(e => 
     myPendingApprovals.some(ea => ea.expense_id === e.id)
   );
 
-  // Admin visibility for rejected claims
+  // Global visibility for rejected claims for Admins
   const rejectedExpenses = currentUser?.role === 'ADMIN' ? expenses.filter(e => e.status === 'REJECTED') : [];
 
   const handleAction = () => {
     if (!selectedExpense || !currentUser) return;
     
+    // Logic constraint: Rejections MUST have a comment
     if (actionType === 'REJECTED' && !comment.trim()) {
       toast({
         variant: "destructive",
@@ -72,7 +78,19 @@ export default function ApprovalsPage() {
       return;
     }
 
-    updateApprovalStatus(selectedExpense.id, currentUser.id, actionType, comment);
+    // Capture the specific step ID if it's an admin override or regular step
+    const myStep = expenseApprovals.find(ea => ea.expense_id === selectedExpense.id && ea.approver_id === currentUser.id && ea.status === 'PENDING');
+    
+    // If admin is overriding, we find the currently active step to apply the action
+    let targetApproverId = currentUser.id;
+    if (currentUser.role === 'ADMIN' && !myStep) {
+        const activeStep = expenseApprovals
+            .filter(ea => ea.expense_id === selectedExpense.id && ea.status === 'PENDING')
+            .sort((a,b) => a.step_order - b.step_order)[0];
+        if (activeStep) targetApproverId = activeStep.approver_id;
+    }
+
+    updateApprovalStatus(selectedExpense.id, targetApproverId, actionType, comment);
 
     toast({
       title: actionType === 'APPROVED' ? "Claim Verified" : "Claim Rejected",
@@ -80,7 +98,6 @@ export default function ApprovalsPage() {
     });
 
     setIsActionOpen(false);
-    setSelectedExpense(null);
     setComment('');
   };
 
@@ -94,7 +111,7 @@ export default function ApprovalsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background font-body">
       <Navbar />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <header className="mb-8 flex justify-between items-center">
@@ -107,65 +124,67 @@ export default function ApprovalsPage() {
               <div className="text-[10px] uppercase font-black text-muted-foreground">Active Policy</div>
               <div className="text-xs font-bold text-primary">{approvalRules[0]?.name}</div>
             </div>
-            <Zap className="w-5 h-5 text-accent" />
+            <ShieldCheck className="w-5 h-5 text-accent" />
           </div>
         </header>
 
         <Tabs defaultValue="pending" className="space-y-6">
           <TabsList className="bg-muted/50 p-1 border border-primary/10">
-            <TabsTrigger value="pending" className="data-[state=active]:bg-primary data-[state=active]:text-white">
+            <TabsTrigger value="pending" className="data-[state=active]:bg-primary data-[state=active]:text-white h-9 px-6 rounded-md font-bold uppercase text-[10px] tracking-widest">
               Action Required ({pendingExpenses.length})
             </TabsTrigger>
             {currentUser?.role === 'ADMIN' && (
-              <TabsTrigger value="rejected" className="data-[state=active]:bg-destructive data-[state=active]:text-white">
-                Rejected Claims ({rejectedExpenses.length})
+              <TabsTrigger value="rejected" className="data-[state=active]:bg-destructive data-[state=active]:text-white h-9 px-6 rounded-md font-bold uppercase text-[10px] tracking-widest">
+                Audit: Rejected ({rejectedExpenses.length})
               </TabsTrigger>
             )}
           </TabsList>
 
           <TabsContent value="pending">
-            <Card className="border-primary/5 shadow-sm">
-              <CardHeader className="bg-muted/5 border-b">
-                <CardTitle className="text-xl">Inbound Submissions</CardTitle>
+            <Card className="border-primary/5 shadow-sm overflow-hidden">
+              <CardHeader className="bg-muted/5 border-b p-4">
+                <CardTitle className="text-lg font-black uppercase tracking-tight flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-amber-500" /> Current Submissions
+                </CardTitle>
                 <CardDescription>
-                  {pendingExpenses.length} items awaiting your verification.
+                  Reviewing {pendingExpenses.length} items awaiting organizational verification.
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-0">
                 {pendingExpenses.length > 0 ? (
                   <Table>
                     <TableHeader>
-                      <TableRow className="bg-muted/5">
-                        <TableHead className="pl-6">Employee</TableHead>
-                        <TableHead>Category</TableHead>
-                        <TableHead>Submission</TableHead>
-                        <TableHead>Amount ({company.base_currency})</TableHead>
-                        <TableHead className="text-right pr-6">Validation</TableHead>
+                      <TableRow className="bg-muted/10">
+                        <TableHead className="pl-6 text-[10px] font-black uppercase tracking-widest">Employee</TableHead>
+                        <TableHead className="text-[10px] font-black uppercase tracking-widest">Category</TableHead>
+                        <TableHead className="text-[10px] font-black uppercase tracking-widest">Description</TableHead>
+                        <TableHead className="text-[10px] font-black uppercase tracking-widest">Amount ({company.base_currency})</TableHead>
+                        <TableHead className="text-right pr-6 text-[10px] font-black uppercase tracking-widest">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {pendingExpenses.map((exp) => {
                         const employee = users.find(u => u.id === exp.user_id);
                         return (
-                          <TableRow key={exp.id} className="hover:bg-muted/5 transition-colors">
+                          <TableRow key={exp.id} className="hover:bg-muted/5 transition-colors group">
                             <TableCell className="pl-6">
                               <div className="flex items-center gap-3 py-1">
-                                <Avatar className="h-9 w-9 border-2 border-primary/10">
+                                <Avatar className="h-9 w-9 border-2 border-primary/10 shadow-sm">
                                   <AvatarImage src={`https://picsum.photos/seed/${exp.user_id}/36/36`} />
-                                  <AvatarFallback>{employee?.name?.charAt(0)}</AvatarFallback>
+                                  <AvatarFallback className="text-xs font-black">{employee?.name?.charAt(0)}</AvatarFallback>
                                 </Avatar>
                                 <div className="flex flex-col">
-                                  <span className="font-bold text-sm">{employee?.name}</span>
-                                  <span className="text-[10px] text-muted-foreground font-bold uppercase">{new Date(exp.expense_date).toLocaleDateString()}</span>
+                                  <span className="font-bold text-sm tracking-tight">{employee?.name}</span>
+                                  <span className="text-[10px] text-muted-foreground font-black uppercase">{new Date(exp.expense_date).toLocaleDateString()}</span>
                                 </div>
                               </div>
                             </TableCell>
                             <TableCell>
-                              <Badge variant="secondary" className="text-[10px] font-black uppercase tracking-tight">{exp.category}</Badge>
+                              <Badge variant="secondary" className="text-[9px] font-black uppercase tracking-tighter px-2 py-0.5">{exp.category}</Badge>
                             </TableCell>
                             <TableCell>
                               <div className="flex flex-col">
-                                <span className="font-bold text-xs line-clamp-1">{exp.description}</span>
+                                <span className="font-bold text-xs truncate max-w-[200px]">{exp.description}</span>
                                 <span className="text-[10px] text-muted-foreground italic">{exp.currency} {exp.amount}</span>
                               </div>
                             </TableCell>
@@ -177,7 +196,7 @@ export default function ApprovalsPage() {
                                 <Button 
                                   variant="outline" 
                                   size="sm" 
-                                  className="bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-600 hover:text-white h-8"
+                                  className="bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-600 hover:text-white h-8 font-black uppercase text-[9px] tracking-widest"
                                   onClick={() => {
                                     setSelectedExpense(exp);
                                     setActionType('APPROVED');
@@ -189,7 +208,7 @@ export default function ApprovalsPage() {
                                 <Button 
                                   variant="outline" 
                                   size="sm" 
-                                  className="bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-600 hover:text-white h-8"
+                                  className="bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-600 hover:text-white h-8 font-black uppercase text-[9px] tracking-widest"
                                   onClick={() => {
                                     setSelectedExpense(exp);
                                     setActionType('REJECTED');
@@ -198,8 +217,8 @@ export default function ApprovalsPage() {
                                 >
                                   <X className="w-3.5 h-3.5 mr-1" /> Reject
                                 </Button>
-                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSelectedExpense(exp)}>
-                                  <Eye className="w-4 h-4" />
+                                <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-primary/5" onClick={() => setSelectedExpense(exp)}>
+                                  <Eye className="w-4 h-4 text-primary" />
                                 </Button>
                               </div>
                             </TableCell>
@@ -209,10 +228,10 @@ export default function ApprovalsPage() {
                     </TableBody>
                   </Table>
                 ) : (
-                  <div className="text-center py-24 bg-muted/10">
-                    <ShieldCheck className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-20" />
-                    <h3 className="text-xl font-bold font-headline">Clean Slate!</h3>
-                    <p className="text-sm text-muted-foreground">All pending claims for your organizational steps are clear.</p>
+                  <div className="text-center py-32 bg-muted/5 border-2 border-dashed m-6 rounded-2xl">
+                    <ShieldCheck className="w-16 h-16 text-muted-foreground mx-auto mb-6 opacity-10" />
+                    <h3 className="text-2xl font-black font-headline text-muted-foreground">Inbox Clear</h3>
+                    <p className="text-sm text-muted-foreground mt-2">There are no pending claims requiring your signature at this moment.</p>
                   </div>
                 )}
               </CardContent>
@@ -220,44 +239,44 @@ export default function ApprovalsPage() {
           </TabsContent>
 
           <TabsContent value="rejected">
-            <Card className="border-destructive/10 shadow-sm">
-              <CardHeader className="bg-destructive/5 border-b">
-                <CardTitle className="text-xl text-destructive flex items-center gap-2">
-                  <AlertCircle className="w-5 h-5" /> Audit Trail: Denied Claims
+            <Card className="border-destructive/10 shadow-sm overflow-hidden">
+              <CardHeader className="bg-destructive/5 border-b p-4">
+                <CardTitle className="text-lg font-black uppercase tracking-tight text-destructive flex items-center gap-2">
+                  <AlertCircle className="w-5 h-5" /> Denied Submissions Registry
                 </CardTitle>
-                <CardDescription>Global view of all rejected expenses for organizational oversight.</CardDescription>
+                <CardDescription>Comprehensive audit log of all non-compliant claims in the organization.</CardDescription>
               </CardHeader>
               <CardContent className="p-0">
                 {rejectedExpenses.length > 0 ? (
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-muted/5">
-                        <TableHead className="pl-6">Employee</TableHead>
-                        <TableHead>Category</TableHead>
-                        <TableHead>Amount</TableHead>
-                        <TableHead>Denied On</TableHead>
-                        <TableHead className="text-right pr-6">Action</TableHead>
+                        <TableHead className="pl-6 text-[10px] font-black uppercase tracking-widest">Employee</TableHead>
+                        <TableHead className="text-[10px] font-black uppercase tracking-widest">Category</TableHead>
+                        <TableHead className="text-[10px] font-black uppercase tracking-widest">Total Value</TableHead>
+                        <TableHead className="text-[10px] font-black uppercase tracking-widest">Rejection Date</TableHead>
+                        <TableHead className="text-right pr-6 text-[10px] font-black uppercase tracking-widest">View</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {rejectedExpenses.map((exp) => {
                         const employee = users.find(u => u.id === exp.user_id);
                         return (
-                          <TableRow key={exp.id} className="hover:bg-rose-50/50">
+                          <TableRow key={exp.id} className="hover:bg-rose-50/50 transition-colors">
                             <TableCell className="pl-6">
                               <div className="flex items-center gap-3">
                                 <Avatar className="h-8 w-8">
                                   <AvatarImage src={`https://picsum.photos/seed/${exp.user_id}/32/32`} />
-                                  <AvatarFallback>{employee?.name?.charAt(0)}</AvatarFallback>
+                                  <AvatarFallback className="text-[10px] font-black">{employee?.name?.charAt(0)}</AvatarFallback>
                                 </Avatar>
-                                <span className="font-bold text-sm">{employee?.name}</span>
+                                <span className="font-bold text-sm tracking-tight">{employee?.name}</span>
                               </div>
                             </TableCell>
-                            <TableCell><Badge variant="outline" className="text-rose-600 border-rose-200">{exp.category}</Badge></TableCell>
-                            <TableCell className="font-black">{company.base_currency} {exp.converted_amount.toFixed(2)}</TableCell>
-                            <TableCell className="text-xs text-muted-foreground">{new Date(exp.expense_date).toLocaleDateString()}</TableCell>
+                            <TableCell><Badge variant="outline" className="text-rose-600 border-rose-200 text-[10px] uppercase font-black">{exp.category}</Badge></TableCell>
+                            <TableCell className="font-black text-destructive">{company.base_currency} {exp.converted_amount.toFixed(2)}</TableCell>
+                            <TableCell className="text-[10px] font-bold text-muted-foreground uppercase">{new Date(exp.expense_date).toLocaleDateString()}</TableCell>
                             <TableCell className="text-right pr-6">
-                              <Button variant="ghost" size="sm" onClick={() => setSelectedExpense(exp)}>View Details</Button>
+                              <Button variant="ghost" size="sm" className="font-black uppercase text-[10px] tracking-widest text-primary" onClick={() => setSelectedExpense(exp)}>Details</Button>
                             </TableCell>
                           </TableRow>
                         );
@@ -265,7 +284,7 @@ export default function ApprovalsPage() {
                     </TableBody>
                   </Table>
                 ) : (
-                  <div className="text-center py-20 text-muted-foreground">No rejected claims found.</div>
+                  <div className="text-center py-24 text-muted-foreground/40 italic">No rejected claims recorded in the ledger.</div>
                 )}
               </CardContent>
             </Card>
@@ -273,51 +292,64 @@ export default function ApprovalsPage() {
         </Tabs>
 
         {selectedExpense && (
-          <div className="mt-8 animate-in">
-             <Card className="border-primary/20 bg-primary/[0.01]">
-              <CardHeader className="flex flex-row items-center justify-between border-b pb-4">
+          <div className="mt-12 animate-in">
+             <Card className="border-primary/20 bg-primary/[0.01] shadow-2xl rounded-2xl overflow-hidden">
+              <CardHeader className="flex flex-row items-center justify-between border-b bg-white/50 backdrop-blur-sm p-6">
                 <div>
-                  <div className="text-[10px] uppercase font-black text-primary mb-1">Detailed Verification</div>
-                  <CardTitle className="text-2xl">Claim Analysis: {selectedExpense.id.toUpperCase()}</CardTitle>
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="w-2 h-2 rounded-full bg-accent animate-pulse" />
+                    <span className="text-[10px] uppercase font-black text-primary tracking-widest">Audit Investigation</span>
+                  </div>
+                  <CardTitle className="text-3xl font-black font-headline">Claim Artifact: {selectedExpense.id.toUpperCase()}</CardTitle>
                 </div>
-                <Button variant="ghost" size="sm" className="font-bold h-8" onClick={() => setSelectedExpense(null)}>Hide Details</Button>
+                <Button variant="ghost" size="sm" className="font-black uppercase text-[10px] tracking-widest h-10 px-4 hover:bg-destructive/5 hover:text-destructive" onClick={() => setSelectedExpense(null)}>Close View</Button>
               </CardHeader>
-              <CardContent className="pt-8">
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
-                  <div className="lg:col-span-2 space-y-8">
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                      <DetailItem label="Submission Date" value={new Date(selectedExpense.created_at).toLocaleDateString()} />
-                      <DetailItem label="Status" value={getStatusBadge(selectedExpense.status)} />
-                      <DetailItem label="Original Value" value={`${selectedExpense.currency} ${selectedExpense.amount}`} />
-                      <DetailItem label="Converted Value" value={`${company.base_currency} ${selectedExpense.converted_amount.toFixed(2)}`} />
+              <CardContent className="p-8">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-16">
+                  <div className="lg:col-span-2 space-y-12">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+                      <DetailItem label="Submission" value={new Date(selectedExpense.created_at).toLocaleDateString()} />
+                      <DetailItem label="Current State" value={getStatusBadge(selectedExpense.status)} />
+                      <DetailItem label="Inbound Currency" value={`${selectedExpense.currency} ${selectedExpense.amount}`} />
+                      <DetailItem label="Settlement Value" value={`${company.base_currency} ${selectedExpense.converted_amount.toFixed(2)}`} />
                     </div>
 
-                    <div className="p-6 bg-white rounded-xl border shadow-sm">
-                      <Label className="text-[10px] uppercase font-black text-muted-foreground mb-4 block">Approval Timeline & Rule Strategy</Label>
-                      <div className="space-y-6">
+                    <div className="space-y-6">
+                      <div className="flex items-center gap-3">
+                        <MessageSquare className="w-5 h-5 text-primary/40" />
+                        <Label className="text-[10px] uppercase font-black text-muted-foreground tracking-[0.2em]">Decision Workflow & Comments</Label>
+                      </div>
+                      <div className="space-y-4 relative">
+                        <div className="absolute left-5 top-0 bottom-0 w-px bg-primary/10" />
                         {expenseApprovals.filter(ea => ea.expense_id === selectedExpense.id).sort((a,b) => a.step_order - b.step_order).map((h, i) => {
                           const approver = users.find(u => u.id === h.approver_id);
                           const isActive = h.status === 'PENDING' && !expenseApprovals.some(prev => prev.expense_id === h.expense_id && prev.step_order < h.step_order && prev.status === 'PENDING');
                           
                           return (
-                            <div key={i} className={`flex items-start gap-4 p-3 rounded-lg border transition-all ${h.status === 'APPROVED' ? 'bg-emerald-50/30 border-emerald-100' : h.status === 'REJECTED' ? 'bg-rose-50/30 border-rose-100' : isActive ? 'bg-amber-50/50 border-amber-200' : 'bg-muted/10 border-transparent opacity-60'}`}>
-                              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-sm shrink-0 shadow-sm ${h.status === 'APPROVED' ? 'bg-emerald-500 text-white' : h.status === 'REJECTED' ? 'bg-rose-500 text-white' : 'bg-amber-500 text-white'}`}>
+                            <div key={i} className={`relative flex items-start gap-6 p-4 rounded-xl border transition-all ${h.status === 'APPROVED' ? 'bg-emerald-50/20 border-emerald-100 shadow-sm' : h.status === 'REJECTED' ? 'bg-rose-50/20 border-rose-100 shadow-sm' : isActive ? 'bg-amber-50/30 border-amber-200 ring-2 ring-amber-100' : 'bg-muted/5 border-transparent opacity-40'}`}>
+                              <div className={`z-10 w-10 h-10 rounded-full flex items-center justify-center font-black text-xs shrink-0 shadow-md ${h.status === 'APPROVED' ? 'bg-emerald-500 text-white' : h.status === 'REJECTED' ? 'bg-rose-500 text-white' : isActive ? 'bg-amber-500 text-white animate-pulse' : 'bg-muted text-muted-foreground border'}`}>
                                 {h.step_order}
                               </div>
-                              <div className="flex-1">
-                                <div className="flex justify-between items-center mb-1">
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-black text-sm">{approver?.name}</span>
-                                    {h.is_manager_step && <Badge variant="secondary" className="text-[8px] h-4">Direct Manager</Badge>}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex justify-between items-start mb-2">
+                                  <div className="flex flex-col">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-black text-sm text-foreground">{approver?.name}</span>
+                                      <Badge variant="outline" className="text-[8px] font-black uppercase h-3.5 px-1 py-0">{approver?.role}</Badge>
+                                      {h.is_manager_step && <Badge variant="secondary" className="text-[8px] h-3.5 px-1 font-black">MANAGER</Badge>}
+                                    </div>
+                                    <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-tight mt-0.5">
+                                      {h.status} {h.acted_at && `• ${new Date(h.acted_at).toLocaleTimeString()}`}
+                                    </span>
                                   </div>
-                                  {h.acted_at && <span className="text-[10px] text-muted-foreground font-medium">{new Date(h.acted_at).toLocaleString()}</span>}
-                                </div>
-                                <div className="text-[10px] font-bold text-muted-foreground uppercase flex items-center gap-1">
-                                  {h.status} {isActive && <span className="flex items-center text-primary ml-2 animate-pulse"><ArrowRight className="w-3 h-3 mr-1" /> Currently Active</span>}
+                                  {isActive && <div className="text-[8px] font-black bg-primary text-white px-2 py-0.5 rounded uppercase tracking-widest shadow-sm">Current Step</div>}
                                 </div>
                                 {h.comments && (
-                                  <div className="mt-2 p-3 bg-white/80 rounded-lg italic text-xs border border-muted-foreground/10 text-muted-foreground">
-                                    "{h.comments}"
+                                  <div className="mt-3 p-4 bg-white/80 rounded-lg border border-primary/5 shadow-inner">
+                                    <div className="text-[8px] uppercase font-black text-muted-foreground mb-1 flex items-center gap-1">
+                                        <MessageSquare className="w-2.5 h-2.5" /> Note from Approver
+                                    </div>
+                                    <p className="italic text-xs text-foreground/80 leading-relaxed font-medium">"{h.comments}"</p>
                                   </div>
                                 )}
                               </div>
@@ -328,21 +360,23 @@ export default function ApprovalsPage() {
                     </div>
                   </div>
 
-                  <div className="lg:col-span-1 space-y-6">
-                    <div className="p-1 border rounded-2xl bg-white shadow-xl rotate-1">
-                      <Label className="text-[10px] uppercase font-black text-center block py-2 border-b">Digital Artifact</Label>
-                      {receipts.find(r => r.expense_id === selectedExpense.id) ? (
-                        <img 
-                          src={receipts.find(r => r.expense_id === selectedExpense.id)?.file_url} 
-                          alt="Receipt" 
-                          className="w-full h-auto object-contain max-h-[600px] rounded-b-xl" 
-                        />
-                      ) : (
-                        <div className="aspect-[3/4] bg-muted flex flex-col items-center justify-center rounded-b-xl text-muted-foreground">
-                          <FileSearch className="w-12 h-12 mb-2 opacity-10" />
-                          <span className="text-xs font-bold uppercase">No Receipt Found</span>
+                  <div className="lg:col-span-1">
+                    <div className="sticky top-32 space-y-4">
+                        <Label className="text-[10px] uppercase font-black text-center block text-muted-foreground tracking-widest">Digital Artifact (Receipt)</Label>
+                        <div className="p-2 border-2 border-primary/10 rounded-3xl bg-white shadow-2xl -rotate-1 hover:rotate-0 transition-transform duration-500 overflow-hidden">
+                        {receipts.find(r => r.expense_id === selectedExpense.id) ? (
+                            <img 
+                            src={receipts.find(r => r.expense_id === selectedExpense.id)?.file_url} 
+                            alt="Receipt Investigation" 
+                            className="w-full h-auto object-contain max-h-[550px] rounded-2xl" 
+                            />
+                        ) : (
+                            <div className="aspect-[3/4] bg-muted/20 flex flex-col items-center justify-center rounded-2xl text-muted-foreground/30">
+                            <FileSearch className="w-16 h-16 mb-4" />
+                            <span className="text-[10px] font-black uppercase tracking-widest">No Artifact Found</span>
+                            </div>
+                        )}
                         </div>
-                      )}
                     </div>
                   </div>
                 </div>
@@ -352,42 +386,47 @@ export default function ApprovalsPage() {
         )}
       </main>
 
+      {/* Decision Dialog */}
       <Dialog open={isActionOpen} onOpenChange={setIsActionOpen}>
-        <DialogContent className="sm:max-w-md border-primary/20">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 font-headline text-3xl">
-              {actionType === 'APPROVED' ? <CheckCircle className="text-emerald-500 w-8 h-8" /> : <X className="text-rose-500 w-8 h-8" />}
-              {actionType === 'APPROVED' ? 'Verify' : 'Deny'} Claim
-            </DialogTitle>
-            <DialogDescription className="font-medium">
-              Actioning <strong>{selectedExpense?.currency} {selectedExpense?.amount}</strong> for {users.find(u => u.id === selectedExpense?.user_id)?.name}.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-6">
-            <div className="space-y-3">
-              <Label className="flex justify-between items-center">
-                <span className="font-black text-xs uppercase tracking-widest text-muted-foreground">Decision Narrative</span>
-                {actionType === 'REJECTED' && <Badge variant="destructive" className="text-[8px] uppercase h-4">Mandatory</Badge>}
-              </Label>
-              <Textarea 
-                placeholder={actionType === 'APPROVED' ? "Optional notes for the record..." : "Explain precisely why this claim was denied..."} 
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                className="min-h-[120px] bg-muted/5 border-primary/10"
-              />
+        <DialogContent className="sm:max-w-md border-primary/10 shadow-2xl rounded-2xl overflow-hidden p-0">
+          <div className={actionType === 'APPROVED' ? "h-2 bg-emerald-500" : "h-2 bg-rose-500"} />
+          <div className="p-6 pt-8">
+            <DialogHeader>
+                <DialogTitle className="flex items-center gap-3 font-black text-3xl font-headline tracking-tight">
+                {actionType === 'APPROVED' ? <CheckCircle className="text-emerald-500 w-10 h-10" /> : <X className="text-rose-500 w-10 h-10" />}
+                {actionType === 'APPROVED' ? 'Authorize' : 'Decline'} Claim
+                </DialogTitle>
+                <DialogDescription className="font-bold text-muted-foreground mt-2">
+                Actioning <span className="text-foreground">{selectedExpense?.currency} {selectedExpense?.amount}</span> submission from {users.find(u => u.id === selectedExpense?.user_id)?.name}.
+                </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-5 py-8">
+                <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                    <Label className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Decision Narrative</Label>
+                    {actionType === 'REJECTED' && <Badge variant="destructive" className="text-[8px] uppercase font-black px-1.5 h-4">Mandatory</Badge>}
+                </div>
+                <Textarea 
+                    placeholder={actionType === 'APPROVED' ? "Optional: Add context for this approval..." : "Required: Explain specifically why this claim does not meet organizational policy..."} 
+                    value={comment}
+                    onChange={(e) => setComment(e.target.value)}
+                    className="min-h-[140px] bg-muted/10 border-primary/5 focus:ring-primary/20 rounded-xl resize-none font-medium"
+                />
+                <p className="text-[9px] text-muted-foreground italic">This note will be visible in the claim audit trail and the employee's dashboard.</p>
+                </div>
             </div>
+            <DialogFooter className="flex flex-col sm:flex-row gap-3">
+                <Button variant="ghost" className="font-black uppercase text-[10px] tracking-widest flex-1 h-12" onClick={() => setIsActionOpen(false)}>Cancel</Button>
+                <Button 
+                variant={actionType === 'APPROVED' ? 'default' : 'destructive'} 
+                onClick={handleAction}
+                disabled={actionType === 'REJECTED' && !comment.trim()}
+                className="flex-1 h-12 font-black uppercase tracking-[0.2em] text-xs shadow-lg"
+                >
+                Confirm {actionType === 'APPROVED' ? 'Approval' : 'Rejection'}
+                </Button>
+            </DialogFooter>
           </div>
-          <DialogFooter className="bg-muted/5 -mx-6 -mb-6 p-6 rounded-b-lg gap-2">
-            <Button variant="ghost" className="font-bold" onClick={() => setIsActionOpen(false)}>Cancel</Button>
-            <Button 
-              variant={actionType === 'APPROVED' ? 'default' : 'destructive'} 
-              onClick={handleAction}
-              disabled={actionType === 'REJECTED' && !comment.trim()}
-              className="px-8 h-10 font-black uppercase tracking-widest"
-            >
-              Confirm {actionType === 'APPROVED' ? 'Approval' : 'Denial'}
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
@@ -396,9 +435,9 @@ export default function ApprovalsPage() {
 
 function DetailItem({ label, value }: { label: string, value: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-1">
-      <span className="text-[9px] uppercase text-muted-foreground font-black tracking-widest">{label}</span>
-      <div className="text-sm font-bold text-foreground">{value}</div>
+    <div className="flex flex-col gap-1.5">
+      <span className="text-[9px] uppercase text-muted-foreground font-black tracking-[0.2em] leading-none">{label}</span>
+      <div className="text-sm font-black text-foreground tracking-tight">{value}</div>
     </div>
   );
 }
