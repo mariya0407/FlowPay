@@ -14,7 +14,7 @@ export interface User {
   name: string;
   email: string;
   role: UserRole;
-  company_ids: string[]; // A user can belong to multiple companies
+  company_ids: string[];
   manager_id?: string;
   created_at: string;
 }
@@ -25,7 +25,7 @@ export interface ApprovalRule {
   name: string;
   is_manager_approver: boolean;
   min_approval_percentage: number;
-  special_approver_id?: string;
+  special_approver_id?: string; // e.g., CFO for auto-approval
   created_at: string;
 }
 
@@ -69,6 +69,7 @@ export interface ExpenseApproval {
   status: ExpenseStatus;
   comments?: string;
   acted_at?: string;
+  is_manager_step?: boolean;
 }
 
 interface ReimburseFlowStore {
@@ -94,12 +95,11 @@ interface ReimburseFlowStore {
 
 const initialCompanies: Company[] = [
   { id: 'c1', name: 'Global Corp', base_currency: 'USD', created_at: new Date().toISOString() },
-  { id: 'c2', name: 'Tech Startups Ltd', base_currency: 'EUR', created_at: new Date().toISOString() },
 ];
 
 const initialUsers: User[] = [
-  { id: 'u1', name: 'Alice Admin', email: 'alice@company.com', role: 'ADMIN', company_ids: ['c1', 'c2'], created_at: new Date().toISOString() },
-  { id: 'u2', name: 'Bob Manager', email: 'bob@company.com', role: 'MANAGER', company_ids: ['c1', 'c2'], created_at: new Date().toISOString() },
+  { id: 'u1', name: 'Alice Admin', email: 'alice@company.com', role: 'ADMIN', company_ids: ['c1'], created_at: new Date().toISOString() },
+  { id: 'u2', name: 'Bob Manager', email: 'bob@company.com', role: 'MANAGER', company_ids: ['c1'], created_at: new Date().toISOString() },
   { id: 'u3', name: 'David Employee', email: 'david@company.com', role: 'EMPLOYEE', company_ids: ['c1'], manager_id: 'u2', created_at: new Date().toISOString() },
 ];
 
@@ -161,14 +161,40 @@ export const useStore = create<ReimburseFlowStore>((set) => ({
       created_at: new Date().toISOString(),
     } : null;
 
-    const ruleApprovers = state.ruleApprovers.filter(ra => ra.rule_id === expenseData.rule_id);
-    const initialApprovals: ExpenseApproval[] = ruleApprovers.map(ra => ({
-      id: Math.random().toString(36).substr(2, 9),
-      expense_id: expenseId,
-      approver_id: ra.approver_id,
-      step_order: ra.step_order,
-      status: 'PENDING',
-    }));
+    const rule = state.approvalRules.find(r => r.id === expenseData.rule_id);
+    const submitter = state.users.find(u => u.id === expenseData.user_id);
+    const initialApprovals: ExpenseApproval[] = [];
+    let currentOrder = 1;
+
+    // 1. Check if Manager Approval is mandatory
+    if (rule?.is_manager_approver && submitter?.manager_id) {
+      initialApprovals.push({
+        id: Math.random().toString(36).substr(2, 9),
+        expense_id: expenseId,
+        approver_id: submitter.manager_id,
+        step_order: currentOrder++,
+        status: 'PENDING',
+        is_manager_step: true
+      });
+    }
+
+    // 2. Add defined Rule Approvers
+    const configuredApprovers = state.ruleApprovers
+      .filter(ra => ra.rule_id === expenseData.rule_id)
+      .sort((a, b) => a.step_order - b.step_order);
+
+    configuredApprovers.forEach(ra => {
+      // Don't duplicate if manager is already first
+      if (initialApprovals.some(a => a.approver_id === ra.approver_id)) return;
+      
+      initialApprovals.push({
+        id: Math.random().toString(36).substr(2, 9),
+        expense_id: expenseId,
+        approver_id: ra.approver_id,
+        step_order: currentOrder++,
+        status: 'PENDING',
+      });
+    });
 
     return {
       expenses: [newExpense, ...state.expenses],
@@ -184,9 +210,27 @@ export const useStore = create<ReimburseFlowStore>((set) => ({
         : ea
     );
 
-    const expenseApprovals = updatedApprovals.filter(ea => ea.expense_id === expenseId);
-    const isRejected = expenseApprovals.some(ea => ea.status === 'REJECTED');
-    const isFullyApproved = expenseApprovals.every(ea => ea.status === 'APPROVED');
+    const expense = state.expenses.find(e => e.id === expenseId);
+    const rule = state.approvalRules.find(r => r.id === expense?.rule_id);
+    const allApprovalsForThisExpense = updatedApprovals.filter(ea => ea.expense_id === expenseId);
+    
+    // Check Rejection
+    const isRejected = allApprovalsForThisExpense.some(ea => ea.status === 'REJECTED');
+    
+    // Check Conditional Rules
+    const approvedCount = allApprovalsForThisExpense.filter(ea => ea.status === 'APPROVED').length;
+    const totalSteps = allApprovalsForThisExpense.length;
+    const approvalPercentage = totalSteps > 0 ? (approvedCount / totalSteps) * 100 : 0;
+    
+    // Percentage Rule
+    const meetsPercentage = approvalPercentage >= (rule?.min_approval_percentage || 100);
+    
+    // Special Approver Rule (CFO/Director)
+    const specialApproverActed = allApprovalsForThisExpense.find(ea => ea.approver_id === rule?.special_approver_id);
+    const specialApproved = specialApproverActed?.status === 'APPROVED';
+    
+    // Fully Approved means either 100% sequential completion OR hybrid condition met
+    const isFullyApproved = (approvedCount === totalSteps) || meetsPercentage || specialApproved;
 
     let finalStatus: ExpenseStatus = 'PENDING';
     if (isRejected) finalStatus = 'REJECTED';
